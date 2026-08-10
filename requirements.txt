@@ -1,0 +1,8 @@
+pywin32>=306
+Pillow>=10.0
+openai>=1.0
+python-dotenv>=1.0
+requests>=2.31
+rapidocr-onnxruntime>=1.4
+numpy>=1.26
+onnxruntime>=1.17

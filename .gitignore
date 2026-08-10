@@ -1,0 +1,42 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ── 虚拟环境 ──
+.venv/
+venv/
+env/
+
+# ── 密钥/配置(用户侧) ──
+.env
+*.env
+config.json
+~/.global_assistant/
+
+# ── 临时/截图产物 ──
+*.png
+*.jpg
+*.jpeg
+!docs/**/*.png
+shot*.png
+_test_*.png
+_*.png
+tmp/
+
+# ── 日志 ──
+*.log
+logs/
+
+# ── 系统 ──
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ── IDE ──
+.idea/
+.vscode/
+*.swp
