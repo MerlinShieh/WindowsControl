@@ -40,3 +40,4 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+@AutomationLog.txt
