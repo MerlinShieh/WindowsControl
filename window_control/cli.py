@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 
-from . import actions, api, input, screen, perceive, games
+from . import actions, api, input, screen, perceive, games, verify, uia
 
 
 def _print(obj, as_json: bool):
@@ -85,6 +85,20 @@ def main(argv=None) -> int:
     p_guard = sub.add_parser("guard", help="游戏防护开关")
     p_guard.add_argument("--on", action="store_true", help="开启防护(默认)")
     p_guard.add_argument("--off", action="store_true", help="关闭防护")
+
+    p_type = sub.add_parser("type", help="前台 Unicode 逐字输入(中文/emoji 可靠)")
+    p_type.add_argument("--text", type=str, required=True)
+
+    p_verify = sub.add_parser("verify", help="操作后验证:检测目标文字是否出现/消失")
+    p_verify.add_argument("--text", type=str, required=True)
+    p_verify.add_argument("--appear", action="store_true", help="验证出现(默认验证消失)")
+    p_verify.add_argument("--timeout", type=float, default=5.0)
+
+    p_uia = sub.add_parser("uia", help="UIA 控件树操作(机会型加速器)")
+    p_uia.add_argument("--hwnd", type=int, required=True, help="目标窗口句柄")
+    p_uia.add_argument("--find", type=str, default="", help="按名称查找控件")
+    p_uia.add_argument("--set-text", type=str, default="", help="ValuePattern 注入文本")
+    p_uia.add_argument("--invoke", type=str, default="", help="按名称 Invoke(点击)")
 
     args = p.parse_args(argv)
 
@@ -192,6 +206,31 @@ def main(argv=None) -> int:
         elif args.on:
             actions.set_guard_enabled(True)
         _print({"guard_enabled": actions.guard_enabled()}, as_json)
+        return 0
+
+    if args.cmd == "type":
+        input.type_text(args.text)
+        _print({"ok": True, "chars": len(args.text)}, as_json)
+        return 0
+
+    if args.cmd == "verify":
+        ok = verify.wait_for_text(
+            args.text, timeout=args.timeout, appear=args.appear
+        )
+        _print({"ok": ok, "target": args.text,
+                "mode": "appear" if args.appear else "disappear"}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "uia":
+        result = {"hwnd": args.hwnd, "uia_available": uia.uia_available()}
+        if args.find:
+            els = uia.find_by_name(args.hwnd, args.find)
+            result["found"] = [e.to_dict() for e in els]
+        if args.set_text:
+            result["set_text_ok"] = uia.set_text(args.hwnd, args.set_text)
+        if args.invoke:
+            result["invoke_ok"] = uia.invoke_by_name(args.hwnd, args.invoke)
+        _print(result, as_json)
         return 0
 
     return 0

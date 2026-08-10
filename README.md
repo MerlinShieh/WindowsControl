@@ -37,7 +37,11 @@ python -m window_control restore --hwnd 2102068  # 恢复
 python -m window_control screenshot --out shot.png          # 全屏截图(所有显示器)
 python -m window_control window-shot --hwnd 2102068 --out w.png  # 抓单个窗口内容(PrintWindow)
 python -m window_control click --hwnd 2102068 --x 100 --y 50  # 后台点击(PostMessage)
+python -m window_control type --text "中文输入"               # 前台 Unicode 逐字输入
 python -m window_control locate --text 发送       # OCR 定位屏幕文字(精确像素坐标)
+python -m window_control verify --text 弹窗       # 操作后验证:文字是否消失
+python -m window_control uia --hwnd 2102068 --set-text "你好"  # UIA 注入(现代应用)
+python -m window_control uia --hwnd 2102068 --find 发送        # UIA 按名查找控件
 python -m window_control games                    # 检测游戏/反作弊进程(高风险窗口默认禁操作)
 python -m window_control guard --off              # 关闭游戏防护(默认开启)
 ```
@@ -72,9 +76,11 @@ window_control_core/
 │   ├── api.py          # 窗口探测:枚举/前台/Z序/进程解析
 │   ├── actions.py      # 窗口操作:最小化/最大化/恢复/关闭/置前 + 游戏防护
 │   ├── screen.py       # 屏幕获取:全屏合成画面 + PrintWindow 单窗口
-│   ├── input.py        # 键鼠模拟:后台 PostMessage + 前台 SendInput
+│   ├── input.py        # 键鼠模拟:后台 PostMessage + 前台 SendInput + Unicode 注入 + 阶梯升级
 │   ├── perceive.py     # OCR 精度层:locate_text 定位屏幕文字(rapidocr)
 │   ├── games.py        # 游戏/反作弊进程检测(高风险窗口默认禁操作)
+│   ├── verify.py       # 操作后验证:文字出现/消失闭环确认
+│   ├── uia.py          # UIA 机会型加速器:find/set_text/invoke
 │   └── cli.py          # argparse 命令行入口
 ├── tests/test_core.py  # 自检脚本
 └── requirements.txt

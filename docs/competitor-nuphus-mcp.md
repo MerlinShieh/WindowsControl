@@ -102,12 +102,16 @@ rapidocr-onnxruntime → 精确定位"发送"二字的像素框 → center 坐�
 - 选型:**rapidocr-onnxruntime**(Python 生态、PaddleOCR 同源、ONNX 轻量、中文强、离线免费)
 - 效果:消灭"认错按钮"失败模式,且不引入新 API 成本
 
-### 🟡 P2:输入阶梯化 + Unicode 注入
+### 🟡 P2:输入阶梯化 + Unicode 注入 ✅ 已完成(2026-08-10)
 
 - **后台→前台阶梯**(借鉴 cua-driver 的 verify→escalate):
   1. 先 `post_click`(不抢焦点)
   2. 操作后验证无效 → 升级为前台 SetCursorPos + mouse_event
 - 移植 nuphus 的 `KEYEVENTF_UNICODE` 逐字注入方案到 `input.py`,替换剪贴板方案,提升中文输入可靠性
+- **UIA 机会型加速器**(`uia.py`,uiautomation 库):find_by_name / set_text(ValuePattern)/ invoke_by_name
+  - 实测:Win11 Notepad(WinUI 3 自绘)不吃 WM_SETTEXT,**但 UIA ValuePattern 完美注入**(标题从 `*P2-UIA注入测试` 变为 `*PythonUIA注入成功-2026`)
+  - 实测教训:uiautomation 库的快捷查找(`root.EditControl()`)对 WinUI 3 无效,需递归遍历子树找 Document/Edit 控件
+  - 前台激活受 Windows 前台锁定限制(后台进程 SetForegroundWindow 被拒)— 环境约束,非代码缺陷
 
 ### 🟢 P3:可选增强(二期+)
 
