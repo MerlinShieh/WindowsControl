@@ -130,13 +130,38 @@ def is_minimized(hwnd: int) -> bool:
 
 
 def bring_to_front(hwnd: int) -> bool:
-    """尝试将窗口置前(可能受系统前台锁定限制)。"""
+    """把窗口置前(前台)。
+
+    绕过 Windows 前台锁定:非前台进程直接 SetForegroundWindow 会被拒,
+    需先 AttachThreadInput 与前台线程/目标线程相连(借鉴 nuphus 方案)。
+    """
     if not _is_valid(hwnd):
         return False
     try:
-        win32gui.ShowWindow(hwnd, SW_RESTORE)
-        win32gui.SetForegroundWindow(hwnd)
-        return True
+        import ctypes
+
+        import win32api
+        import win32process
+
+        user32 = ctypes.windll.user32
+        win32gui.ShowWindow(hwnd, SW_RESTORE)  # 若最小化先恢复
+        fg = win32gui.GetForegroundWindow()
+        cur_tid = win32api.GetCurrentThreadId()
+        fg_tid, _ = win32process.GetWindowThreadProcessId(fg)
+        tg_tid, _ = win32process.GetWindowThreadProcessId(hwnd)
+        try:
+            if fg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, fg_tid, True)
+            if tg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, tg_tid, True)
+            user32.SetForegroundWindow(hwnd)
+            user32.BringWindowToTop(hwnd)
+        finally:
+            if fg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, fg_tid, False)
+            if tg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, tg_tid, False)
+        return win32gui.GetForegroundWindow() == hwnd
     except Exception:
         return False
 
