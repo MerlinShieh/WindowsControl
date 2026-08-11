@@ -72,11 +72,54 @@ class TestExecute(unittest.TestCase):
         self.assertEqual(r.action, "unknown")
 
     def test_execute_open(self):
-        with mock.patch("window_control.commands._launch_app") as m:
+        with mock.patch("window_control.commands._open_or_show") as m:
             m.return_value = commands.CommandResult(True, "open", "ok")
             r = commands.execute("打开 计算器")
             self.assertTrue(r.ok)
             m.assert_called_once_with("计算器")
+
+    def test_open_or_show_existing_window(self):
+        """已运行且有可见窗口 → 置前而非启动新实例。"""
+        from window_control.api import WindowInfo
+
+        fake = WindowInfo(111, "微信", 1, "Weixin.exe")
+        with mock.patch("window_control.commands.api.find_windows",
+                        return_value=[fake]) as fw, \
+             mock.patch("window_control.commands.actions.bring_to_front") as btf:
+            r = commands._open_or_show("微信")
+            self.assertTrue(r.ok)
+            self.assertEqual(r.data["mode"], "show_existing")
+            btf.assert_called_once_with(111)
+            fw.assert_called_once_with(process="weixin")
+
+    def test_open_or_show_hidden_window(self):
+        """进程在但窗口隐藏 → 显示隐藏窗口。"""
+        from window_control.api import WindowInfo
+
+        with mock.patch("window_control.commands.api.find_windows", return_value=[]), \
+             mock.patch("window_control.commands._find_hidden_window",
+                        return_value=222) as fhw, \
+             mock.patch("window_control.commands.actions.show") as sh, \
+             mock.patch("window_control.commands.actions.bring_to_front") as btf:
+            r = commands._open_or_show("微信")
+            self.assertTrue(r.ok)
+            self.assertEqual(r.data["mode"], "show_hidden")
+            fhw.assert_called_once_with("weixin")
+            sh.assert_called_once_with(222)
+            btf.assert_called_once_with(222)
+
+    def test_open_or_show_launch_new(self):
+        """进程完全不在 → 启动新实例。"""
+        from window_control.api import WindowInfo
+
+        with mock.patch("window_control.commands.api.find_windows", return_value=[]), \
+             mock.patch("window_control.commands._find_hidden_window",
+                        return_value=None), \
+             mock.patch("window_control.commands._launch_app") as la:
+            la.return_value = commands.CommandResult(True, "open", "已启动")
+            r = commands._open_or_show("记事本")
+            self.assertTrue(r.ok)
+            la.assert_called_once_with("记事本")
 
     def test_execute_minimize(self):
         with mock.patch("window_control.commands._act_window") as m:

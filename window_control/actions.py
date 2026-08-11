@@ -99,11 +99,17 @@ def hide(hwnd: int) -> bool:
 
 
 def show(hwnd: int) -> bool:
+    """显示隐藏的窗口(SW_SHOWNORMAL)。
+
+    注意:ShowWindow 返回值是"窗口之前是否可见",不可见窗口显示时
+    返回 False;故以操作后 IsWindowVisible 状态为准。
+    """
     if not _is_valid(hwnd):
         return False
     if _guard_risky(hwnd):
         return False
-    return bool(win32gui.ShowWindow(hwnd, SW_SHOWNORMAL))
+    win32gui.ShowWindow(hwnd, SW_SHOWNORMAL)
+    return bool(win32gui.IsWindowVisible(hwnd))
 
 
 def close(hwnd: int) -> bool:

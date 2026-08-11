@@ -98,13 +98,74 @@ def _launch_app(target: str) -> CommandResult:
 # 窗口/进程中文别名映射(标题匹配失败时按进程名回退)
 _PROC_ALIASES = {
     "记事本": "notepad", "notepad": "notepad",
-    "微信": "wechat", "wechat": "wechat",
+    "微信": "weixin", "weixin": "weixin", "wechat": "weixin",
     "edge": "msedge", "浏览器": "msedge", "微软edge": "msedge",
     "chrome": "chrome", "谷歌浏览器": "chrome",
     "powershell": "powershell", "终端": "powershell", "命令行": "powershell",
     "explorer": "explorer", "文件管理器": "explorer", "资源管理器": "explorer",
     "vscode": "code", "vs code": "code", "code": "code",
 }
+
+
+def _find_hidden_window(proc_name: str) -> Optional[int]:
+    """枚举全部窗口(含隐藏),按进程名找主窗口 hwnd。
+
+    返回 None 表示没有该进程的窗口。主窗口判定:非空标题 + 非托盘消息窗。
+    """
+    import ctypes
+
+    import win32gui
+    import win32process
+
+    from .api import _build_proc_name_cache
+
+    cache = _build_proc_name_cache()
+    proc_lower = proc_name.lower()
+    target_pids = {pid for pid, name in cache.items() if proc_lower in name.lower()}
+    if not target_pids:
+        return None
+
+    best = None
+    best_score = -1
+
+    # 系统辅助窗口类名(排除)。注意:Qt51514QWindowIcon 是 Qt 主窗口,
+    # 不能排除;只排除 Qt 工具窗(QWindowToolSaveBits)和 IME 等。
+    EXCLUDE_CLASS = ("MSCTFIME UI", "IME", "Windows.UI.Core.CoreWindow",
+                     "Qt51514QWindowToolSaveBits", "ForegroundStaging",
+                     "Shell_TrayWnd")
+    EXCLUDE_TITLE = ("MSCTFIME UI", "Default IME", "Microsoft Text Input Application")
+
+    def cb(hwnd, _):
+        nonlocal best, best_score
+        try:
+            tid, pid = win32process.GetWindowThreadProcessId(hwnd)
+        except Exception:
+            return True
+        if pid not in target_pids:
+            return True
+        title = win32gui.GetWindowText(hwnd)
+        cls = win32gui.GetClassName(hwnd)
+        # 排除:托盘消息窗/IME/工具窗/空标题
+        if not title or not title.strip():
+            return True
+        if "TrayIcon" in cls or "ToolbarWindow" in cls:
+            return True
+        if cls in EXCLUDE_CLASS or title in EXCLUDE_TITLE:
+            return True
+        # 评分:中文标题(主窗口通常是中文)+ 标题长度 + 非工具类
+        score = 0
+        if any('\u4e00' <= ch <= '\u9fff' for ch in title):
+            score += 10
+        score += min(len(title), 20)
+        if "Tool" not in cls:
+            score += 5
+        if score > best_score:
+            best = hwnd
+            best_score = score
+        return True
+
+    win32gui.EnumWindows(cb, None)
+    return best
 
 
 def _window_by_title(substr: str) -> Optional[api.WindowInfo]:
@@ -177,7 +238,36 @@ def _confirm(question: str) -> bool:
 
 @_register("open", r"^(打开|启动|开启|运行|启动应用)\s+(.+)$")
 def _h_open(text, m):
-    return _launch_app(m.group(2))
+    return _open_or_show(m.group(2))
+
+
+def _open_or_show(target: str) -> CommandResult:
+    """打开应用:若已运行且有隐藏窗口 → 显示主窗口;否则启动进程。
+
+    这是"打开微信"的真实语义:微信常驻后台(进程在、窗口 hidden),
+    此时不是启动新实例,而是把隐藏窗口显示出来。
+    """
+    # 1. 找隐藏/可见的主窗口(按进程名 + 标题)
+    proc = _PROC_ALIASES.get(target.lower(), target.lower())
+    # 先查可见窗口
+    visible = api.find_windows(process=proc)
+    if visible:
+        win = next((w for w in visible if not w.is_desktop_shell), None)
+        if win:
+            actions.bring_to_front(win.hwnd)
+            return CommandResult(True, "open",
+                                 f"已显示 {target} 窗口",
+                                 {"hwnd": win.hwnd, "mode": "show_existing"})
+    # 2. 查隐藏窗口(需要枚举全部窗口)
+    hidden_win = _find_hidden_window(proc)
+    if hidden_win is not None:
+        actions.show(hidden_win)
+        actions.bring_to_front(hidden_win)
+        return CommandResult(True, "open",
+                             f"已从后台显示 {target}",
+                             {"hwnd": hidden_win, "mode": "show_hidden"})
+    # 3. 都没找到 → 启动进程
+    return _launch_app(target)
 
 
 @_register("minimize", r"^(最小化|缩小)\s+(.+)$")
