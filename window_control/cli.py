@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 
-from . import actions, api, input, screen, perceive, games, verify, uia
+from . import actions, api, input, screen, perceive, games, verify, uia, commands
 
 
 def _print(obj, as_json: bool):
@@ -99,6 +99,9 @@ def main(argv=None) -> int:
     p_uia.add_argument("--find", type=str, default="", help="按名称查找控件")
     p_uia.add_argument("--set-text", type=str, default="", help="ValuePattern 注入文本")
     p_uia.add_argument("--invoke", type=str, default="", help="按名称 Invoke(点击)")
+
+    p_run = sub.add_parser("run", help="快速路径:解析中文指令并执行")
+    p_run.add_argument("--text", type=str, required=True, help="自然语言指令,如:最小化微信")
 
     args = p.parse_args(argv)
 
@@ -232,6 +235,11 @@ def main(argv=None) -> int:
             result["invoke_ok"] = uia.invoke_by_name(args.hwnd, args.invoke)
         _print(result, as_json)
         return 0
+
+    if args.cmd == "run":
+        result = commands.execute(args.text)
+        _print(result.to_dict(), as_json)
+        return 0 if result.ok else 1
 
     return 0
 
