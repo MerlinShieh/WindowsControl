@@ -15,6 +15,15 @@ from typing import Optional
 import win32gui
 from PIL import Image, ImageGrab
 
+from .dpi import enable_dpi_awareness  # noqa: F401  (导入即声明,幂等)
+
+# ─── DPI 感知声明(必须在任何 Win32 坐标 API 调用前) ───
+# Python 进程默认 DPI-unaware:GetWindowRect/WindowFromPoint 等返回
+# "虚拟化逻辑坐标",与 ImageGrab 抓的物理像素错位(高 DPI 屏 1.5x 等),
+# 导致"按窗口位置裁剪"抓错区域。声明 PER_MONITOR_DPI_AWARE 后,
+# 全链路统一物理像素,窗口 rect 与截图坐标一致。
+enable_dpi_awareness()
+
 # PrintWindow 标志
 PW_RENDERFULLCONTENT = 0x00000002
 
@@ -108,6 +117,34 @@ def capture_window_fallback(
     hwnd: int, path: str = "window.png", all_screens: bool = True
 ) -> Optional[str]:
     """回退方案:全屏截图后按窗口矩形裁剪(PrintWindow 黑图时用)。"""
+    r = capture_window_by_rect(hwnd, path, all_screens=all_screens)
+    return r[0] if r else None
+
+
+def capture_window_by_rect(
+    hwnd: int, path: str = "window.png", all_screens: bool = True
+) -> Optional[tuple]:
+    """★前台窗口专用截图:全屏截图 + 按窗口矩形裁剪。
+
+    相比 PrintWindow 的优势:
+      1. 不黑图 — 硬件加速/游戏窗口 PrintWindow 常返回黑图,
+         全屏裁剪抓 DWM 合成画面,永不黑图;
+      2. OCR 无干扰 — 裁剪后只含窗口内容,
+         其他窗口/桌面文字不会进入 OCR 结果;
+      3. 坐标可换算 — 返回窗口屏幕位置,
+         窗口内相对坐标 + 位置 = 屏幕绝对坐标。
+
+    Args:
+        hwnd: 目标窗口句柄(需可见,否则裁剪到遮挡窗口内容)。
+        path: 输出文件路径。
+        all_screens: True 抓所有显示器,False 只抓主屏。
+
+    Returns:
+        (保存路径, (left, top, width, height)) — 窗口在屏幕的位置;
+        失败返回 None。
+        注意:窗口被其他窗口遮挡时,裁剪结果是被遮挡的画面(非窗口内容),
+        后台场景请用 capture_window(PrintWindow)。
+    """
     if not hwnd or not win32gui.IsWindow(hwnd):
         return None
     left, top, right, bottom = win32gui.GetWindowRect(hwnd)
@@ -117,4 +154,4 @@ def capture_window_fallback(
     img = ImageGrab.grab(all_screens=all_screens)
     img = img.crop((left, top, right, bottom))
     img.save(path, "PNG")
-    return os.path.abspath(path)
+    return os.path.abspath(path), (left, top, w, h)

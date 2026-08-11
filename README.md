@@ -93,6 +93,22 @@ window_control_core/
 - **键鼠控制**:`click`/后台输入 实现不抢焦点的自动化;
 - 后续可扩展:热键唤醒(全局注册)、语音指令映射、UIA 控件树读取。
 
+## 开源与许可
+
+本项目以 **MIT License** 开源(见 LICENSE 文件),代码可自由使用/修改/分发(含商业用途)。
+
+**第三方模型许可声明**(重要):
+
+- `window_control/perceive.py` 的**图标检测**使用 `onnx-community/OmniParser-v2.0_icon_detect`
+  (微软 OmniParser v2 的 icon_detect ONNX 导出,首次运行时自动下载到 `models/icon_detect_v2.onnx`)。
+  该模型权重为 **AGPL-3.0 许可**,仅用于本项目的界面元素检测功能;
+  **项目代码本身保持 MIT**,模型权重按 AGPL-3.0 条款使用(使用方须遵循 AGPL 对模型权重的约束)。
+- OCR 使用 rapidocr-onnxruntime(Apache-2.0 许可),无额外约束。
+
+> 若你计划闭源/商用且需规避 AGPL 约束,可删除 `models/` 下的模型文件 —
+> `detect_icons` 会优雅降级为纯 OCR 模式(功能不受影响,仅失去无文字图标定位能力),
+> 或替换为自训的宽松许可模型(见 `.hermes/plans/nuphus-perceive-upgrade.md` 路径 B)。
+
 ## 注意
 
 - `input.py` 前台模拟会移动真实光标 / 发送真实按键,调用时需谨慎;

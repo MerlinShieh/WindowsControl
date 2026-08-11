@@ -99,6 +99,34 @@ class TestEscalation(unittest.TestCase):
             fg.assert_called_once_with("你好")
 
 
+class TestClickRow(unittest.TestCase):
+    """行级点击:bbox → 中心 → 后台 → verify → 升级。"""
+
+    def test_click_row_computes_center(self):
+        """click_row 应计算行 bbox 中心并走 click_with_escalation。"""
+        with mock.patch("window_control.input.click_with_escalation") as cwe:
+            ok = input.click_row(123, (100, 200, 80, 40))
+            self.assertTrue(ok)
+            # 中心 = (100+40, 200+20) = (140, 220)
+            cwe.assert_called_once_with(123, 140, 220, button="left", verify=None)
+
+    def test_click_row_passes_verify(self):
+        """verify 回调应透传给 click_with_escalation。"""
+        v = mock.Mock(return_value=True)
+        with mock.patch("window_control.input.click_with_escalation") as cwe:
+            input.click_row(123, (10, 10, 100, 50), verify=v)
+            cwe.assert_called_once_with(123, 60, 35, button="left", verify=v)
+
+    def test_click_row_invalid_hwnd(self):
+        """无效窗口应返回 False,不调用后台点击。"""
+        with mock.patch("window_control.input.win32gui.IsWindow", return_value=False) as iw, \
+             mock.patch("window_control.input.post_click") as pc:
+            ok = input.click_row(123, (10, 10, 50, 30))
+            self.assertFalse(ok)
+            iw.assert_called_once_with(123)
+            pc.assert_not_called()
+
+
 class TestVerify(unittest.TestCase):
     """操作后验证封装。"""
 

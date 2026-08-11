@@ -6,11 +6,17 @@ from __future__ import annotations
 
 import ctypes
 import os
+import time
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+import win32con
 import win32gui
 import win32process
+
+from .dpi import enable_dpi_awareness  # noqa: F401  (导入即声明,幂等)
+
+enable_dpi_awareness()
 
 # --- 常量 ---
 GW_HWNDNEXT = 2
@@ -278,3 +284,168 @@ def find_windows(title_contains: str = "", process: str = "") -> List[WindowInfo
             continue
         out.append(w)
     return out
+
+
+def ensure_window_ready(hwnd: int) -> bool:
+    """确保窗口可操作:检测最小化并恢复(不抢焦点,恢复后立即移屏外)。
+
+    实测:最小化窗口 rect 变 (-32000,-32000),PrintWindow 只抓到 237×39
+    小图、OCR 全空 — 必须先恢复才能后台操作。
+
+    方案(实测可靠):SW_SHOWNOACTIVATE 恢复(不激活、不抢焦点)→
+    立即 SetWindowPos 移到屏幕外(保持可见,PrintWindow 可抓,用户看不见)。
+    注意:恢复瞬间窗口在原位渲染约 1 帧(Windows 硬限制,无 API 可绕过 —
+    DWM Cloak/SetWindowDisplayAffinity 跨进程均被拒,实测 E_ACCESSDENIED)。
+    操作完 window_back_to_place() 收尾。
+
+    Returns:
+        True = 窗口可用(未最小化或已恢复并移出屏幕);False = 无效句柄。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    if not win32gui.IsIconic(hwnd):
+        return True  # 正常窗口,无需处理
+    # 最小化恢复:SW_SHOWNOACTIVATE(不激活)→ 立即移屏外
+    win32gui.ShowWindow(hwnd, win32con.SW_SHOWNOACTIVATE)
+    _window_offscreen(hwnd)
+    time.sleep(0.3)
+    return True
+
+
+# ⚠️ DWM Cloak:跨进程设置被 Windows 拒绝(E_ACCESSDENIED,实测 0x80070005),
+# 对非本进程窗口无效。保留此函数仅作参考,勿用于最小化恢复隐身。
+_DWMWA_CLOAK = 13
+_dwmapi = None
+
+
+def _cloak(hwnd: int, on: bool) -> None:
+    """DWM Cloak:窗口隐身(不渲染)/解除。**跨进程不可用**(E_ACCESSDENIED)。"""
+    global _dwmapi
+    try:
+        if _dwmapi is None:
+            _dwmapi = ctypes.windll.dwmapi
+        val = ctypes.c_int(1 if on else 0)
+        _dwmapi.DwmSetWindowAttribute(hwnd, _DWMWA_CLOAK, ctypes.byref(val), 4)
+    except Exception:
+        pass
+
+
+# 全局:被移到屏幕外的窗口及其原位(用于操作后移回)
+_offscreen_orig: dict = {}
+
+# ── 窗口动画控制(最小化→恢复时禁用动画,避免用户看到展开过程) ──
+_SPI_GETANIMATION = 0x0048
+_SPI_SETANIMATION = 0x0049
+
+
+class _ANIMATIONINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("iMinAnimate", ctypes.c_int)]
+
+
+def _get_anim_setting() -> int:
+    try:
+        ai = _ANIMATIONINFO()
+        ai.cbSize = ctypes.sizeof(_ANIMATIONINFO)
+        user32.SystemParametersInfoW(_SPI_GETANIMATION, ctypes.sizeof(_ANIMATIONINFO),
+                                     ctypes.byref(ai), 0)
+        return ai.iMinAnimate
+    except Exception:
+        return -1
+
+
+def _set_anim_setting(v: int) -> None:
+    try:
+        ai = _ANIMATIONINFO()
+        ai.cbSize = ctypes.sizeof(_ANIMATIONINFO)
+        ai.iMinAnimate = v
+        user32.SystemParametersInfoW(_SPI_SETANIMATION, ctypes.sizeof(_ANIMATIONINFO),
+                                     ctypes.byref(ai), 0)
+    except Exception:
+        pass
+
+
+def _disable_window_anim() -> bool:
+    """临时禁用窗口动画(最小化/还原),返回是否真的改了。"""
+    cur = _get_anim_setting()
+    if cur == 0:
+        return False  # 本来就禁用
+    _set_anim_setting(0)
+    return True
+
+
+def _restore_window_anim() -> None:
+    """恢复窗口动画设置(调用 _disable_window_anim 后必须调用)。"""
+    _set_anim_setting(1)
+
+
+def _window_offscreen(hwnd: int) -> None:
+    """把窗口移到屏幕外(保持可见,PrintWindow 可抓,用户看不见)。"""
+    rect = win32gui.GetWindowRect(hwnd)
+    _offscreen_orig[hwnd] = rect
+    w, h = rect[2] - rect[0], rect[3] - rect[1]
+    # 移到主屏左侧外(负坐标),保持尺寸
+    win32gui.SetWindowPos(hwnd, 0, -w - 100, 100, w, h,
+                          win32con.SWP_NOACTIVATE | win32con.SWP_NOZORDER)
+
+
+def window_back_to_place(hwnd: int) -> None:
+    """操作完收尾:屏幕外直接最小化(不经过屏幕),恢复位置设回原位。
+
+    配合 ensure_window_ready 使用:窗口在屏幕外完成操作后,保持屏幕外
+    直接 SW_MINIMIZE(用户全程看不见),然后最小化状态下设 rcNormalPosition
+    = 原位(不会移动窗口),用户之后从任务栏恢复时回到原位置。
+
+    Returns:
+        None
+    """
+    if hwnd not in _offscreen_orig:
+        return
+    orig = _offscreen_orig.pop(hwnd)
+    try:
+        # 1. 屏幕外直接最小化(不经过原位 → 无可见闪现)
+        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+        time.sleep(0.2)
+        # 2. 最小化状态下设恢复位置 = 原位(不移动窗口)
+        wp = list(win32gui.GetWindowPlacement(hwnd))
+        wp[4] = orig
+        win32gui.SetWindowPlacement(hwnd, tuple(wp))
+    except Exception:
+        # 兜底:直接移回原位(可能短暂可见,但至少位置正确)
+        l, t, r, b = orig
+        win32gui.SetWindowPos(hwnd, 0, l, t, r - l, b - t,
+                              win32con.SWP_NOACTIVATE | win32con.SWP_NOZORDER)
+
+
+def _restore_fg(prev: int) -> bool:
+    """把前台还给 prev(返回是否成功)。
+
+    Windows 前台锁定:非前台进程 SetForegroundWindow 会被拒。标准技巧:
+    先模拟一次按键(keybd_event Alt)让本进程成为"最近输入进程",
+    从而获得 SetForegroundWindow 权限。pywin32 版失败静默,须 ctypes 检查。
+    """
+    user32 = ctypes.windll.user32
+    user32.SetForegroundWindow.restype = ctypes.c_int
+    # 方法1:直接(通常被拒,但先试)
+    if user32.SetForegroundWindow(prev):
+        return True
+    # 方法2:模拟按键获得前台权限后重试
+    try:
+        user32.keybd_event(0x12, 0, 0, 0)  # VK_MENU down
+        user32.keybd_event(0x12, 0, 2, 0)  # VK_MENU up
+        time.sleep(0.05)
+        if user32.SetForegroundWindow(prev):
+            return True
+    except Exception:
+        pass
+    # 方法3:AttachThreadInput 借用前台线程的输入队列
+    try:
+        cur = win32gui.GetForegroundWindow()
+        cur_tid = win32process.GetWindowThreadProcessId(cur)[0]
+        prev_tid = win32process.GetWindowThreadProcessId(prev)[0]
+        if user32.AttachThreadInput(cur_tid, prev_tid, True):
+            ok = bool(user32.SetForegroundWindow(prev))
+            user32.AttachThreadInput(cur_tid, prev_tid, False)
+            return ok
+    except Exception:
+        pass
+    return False

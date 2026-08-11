@@ -84,10 +84,20 @@ class TestTools(unittest.TestCase):
 
         with mock.patch("window_control.perceive.locate_text_on_screen",
                         return_value=[TextMatch("发送", 0.99, (100, 200, 40, 20))]), \
-             mock.patch("window_control.agent.wc_input.click") as clk:
+             mock.patch("window_control.agent.wc_input.window_from_point",
+                        return_value=12345), \
+             mock.patch("window_control.agent.win32gui.GetWindowRect",
+                        return_value=(0, 0, 1920, 1080)), \
+             mock.patch("window_control.agent.wc_input.post_click") as bg, \
+             mock.patch("window_control.agent.wc_input.foreground_lock"):
             r = agent._tool_click_text({"text": "发送"})
             self.assertTrue(r["ok"])
-            clk.assert_called_once_with(120, 210)
+            self.assertTrue(r["background"])
+            # 后台化:post_click(hwnd, 客户区x, 客户区y)
+            bg.assert_called_once()
+            args = bg.call_args.args
+            self.assertEqual(args[0], 12345)  # hwnd
+            self.assertEqual((args[1], args[2]), (120, 210))  # 客户区坐标
 
     def test_tool_click_text_not_found(self):
         with mock.patch("window_control.perceive.locate_text_on_screen",
@@ -96,7 +106,11 @@ class TestTools(unittest.TestCase):
             self.assertFalse(r["ok"])
 
     def test_tool_type_text(self):
-        with mock.patch("window_control.agent.wc_input.type_text") as m:
+        with mock.patch("window_control.agent.wc_input.type_text") as m, \
+             mock.patch("window_control.agent.wc_input.type_text_bg"), \
+             mock.patch("window_control.agent.wc_input.window_from_point",
+                        return_value=None), \
+             mock.patch("window_control.agent.wc_input.foreground_lock"):
             r = agent._tool_type_text({"text": "你好"})
             self.assertTrue(r["ok"])
             m.assert_called_once_with("你好")

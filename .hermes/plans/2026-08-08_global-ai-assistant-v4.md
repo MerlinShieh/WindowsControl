@@ -184,6 +184,14 @@ D:\data\opencode_temp_code\window_control_core\
 - 退出确认框
 - 验证:托盘出现,左键唤出,右键退出(人工)
 
+### Task 13b: 微信托盘隐藏态恢复交互(已实测,硬边界)
+**Files:** Edit `window_control/api.py`(已实现检测+ensure_window_ready)+ `ui/chat_window.py`
+- 背景:微信关窗进托盘后 Qt 冻结渲染,程序无法自动恢复(实测:结构可恢复但 PrintWindow 白屏,8 种 Win32 方法 + 新版 ensure_window_ready 均无效)
+- 检测:目标窗口 IsWindowVisible=False 但进程存活 → 托盘隐藏态
+- **产品交互:对话窗口显示提示「微信窗口已关闭,请点击任务栏微信图标恢复」→ 轮询等待窗口 visible → 恢复后自动继续后台操作**(不静默失败,通用降级原则)
+- 注意:辅助窗口(Weixin/Qt51514QWindowToolSaveBits 等 16 个)会干扰枚举,须以主窗口(hwnd=263608 类 Qt51514QWindowIcon, title='微信')为准
+- 验证:关窗进托盘 → 触发操作 → 出现提示 → 用户点击任务栏 → 操作自动继续(人工)
+
 ### Task 14: 首次运行向导
 **Files:** Create `ui/setup_wizard.py`
 - 无 key 首次启动 → 配置窗:提供商/API key/热键/语音开关 + 连通性测试按钮
@@ -249,3 +257,6 @@ D:\data\opencode_temp_code\window_control_core\
 - [x] 托盘图标(左键唤出 / 右键退出)
 - [x] 热键默认 `Ctrl+Alt+Space`
 - [x] 二期可选:Hermes 转交(进阶增强)
+- [x] 微信托盘隐藏态(关窗不退出):程序无法自动恢复(实测 8 种 Win32 方法全部白屏,Q
+t 应用冻结渲染)— **产品策略:检测到该状态 → 提示用户手动点击任务栏图标 → 恢复后自动继续后台操作**
+- [x] 通用降级原则:**程序无法执行的操作,提示用户手动完成,不静默失败**(托盘恢复、需真实人工确认的高危操作等)

@@ -20,23 +20,150 @@ from typing import Optional, Union
 
 import win32con
 import win32gui
+import win32process  # noqa: E402
 
 # ─── 后台输入:PostMessage ───
 
-def post_click(hwnd: int, x: int, y: int, button: str = "left") -> bool:
-    """向窗口客户区坐标 (x, y) 发送后台鼠标点击,不抢焦点。"""
+# 前台守护:某些应用(如微信)收到 WM_LBUTTONDOWN 后会自动激活自己
+# (SetForegroundWindow),破坏"后台操作"语义。post_click 等后台操作
+# 默认启用守护:操作后若目标窗口抢占了前台,立即恢复原前台窗口。
+_restore_lock = None
+
+
+# ─── 前台锁定(替代事后恢复,从源头阻止激活) ───
+# 微信等应用收到 PostMessage 鼠标/键盘消息后会异步自激活抢前台。
+# 正解:操作前 LockSetForegroundWindow(LSFW_LOCK) 锁定前台 —
+# 系统拒绝目标窗口的 SetForegroundWindow 请求,窗口根本不会激活,
+# 无闪烁、无需事后恢复。实测(微信):Lock 后点击/输入全程前台不变。
+LSFW_LOCK = 1
+LSFW_UNLOCK = 0
+_lock_depth = 0  # 嵌套计数(lock 可重入)
+
+
+def lock_foreground() -> bool:
+    """锁定前台:阻止其他窗口激活(操作后台窗口前调用)。
+
+    Returns:
+        True = 锁定成功;False = 系统不支持。
+    """
+    global _lock_depth
+    try:
+        r = user32.LockSetForegroundWindow(LSFW_LOCK)
+        if r:
+            _lock_depth += 1
+        return bool(r)
+    except Exception:
+        return False
+
+
+def unlock_foreground() -> None:
+    """解除前台锁定(与 lock_foreground 配对)。"""
+    global _lock_depth
+    if _lock_depth <= 0:
+        return
+    _lock_depth -= 1
+    if _lock_depth == 0:
+        try:
+            user32.LockSetForegroundWindow(LSFW_UNLOCK)
+        except Exception:
+            pass
+
+
+class foreground_lock:
+    """上下文管理器:with foreground_lock(): 后台操作窗口。"""
+
+    def __enter__(self):
+        lock_foreground()
+        return self
+
+    def __exit__(self, *exc):
+        unlock_foreground()
+        return False
+
+
+def _restore_foreground(prev_hwnd: Optional[int]) -> None:
+    """恢复前台窗口为 prev_hwnd(尽力而为,不抛异常)。
+
+    保留用于无 Lock 环境(如 Lock 失败时)的兜底恢复。
+    """
+    if not prev_hwnd or not win32gui.IsWindow(prev_hwnd):
+        return
+    if prev_hwnd == win32gui.GetForegroundWindow():
+        return
+    try:
+        win32gui.SetForegroundWindow(prev_hwnd)
+    except Exception:
+        pass
+
+
+def restore_foreground() -> None:
+    """把前台窗口恢复为最近一次 post_click 之前的前台窗口。
+
+    供外部在后台操作序列结束时调用(如点击后验证失败需重试时)。
+    无操作时为空操作。
+    """
+    if _restore_lock is not None:
+        _restore_foreground(_restore_lock)
+
+
+def post_click(
+    hwnd: int, x: int, y: int, button: str = "left",
+    restore_focus: bool = True,
+) -> bool:
+    """向窗口客户区坐标 (x, y) 发送后台鼠标点击,不抢焦点。
+
+    Args:
+        hwnd: 目标窗口句柄。
+        x, y: 客户区坐标。
+        button: "left" / "right" / "middle"。
+        restore_focus: True 时优先用 LockSetForegroundWindow 锁定前台
+            (从源头阻止目标应用自激活),Lock 失败才用轮询事后恢复。
+
+    Returns:
+        True = 已发送点击。
+    """
+    global _restore_lock
     if not hwnd or not win32gui.IsWindow(hwnd):
         return False
-    lparam = (y << 16) | (x & 0xFFFF)
-    if button == "right":
-        down, up = win32con.WM_RBUTTONDOWN, win32con.WM_RBUTTONUP
-    elif button == "middle":
-        down, up = win32con.WM_MBUTTONDOWN, win32con.WM_MBUTTONUP
-    else:
-        down, up = win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP
-    win32gui.PostMessage(hwnd, down, 1, lparam)
-    win32gui.PostMessage(hwnd, up, 0, lparam)
-    return True
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        lparam = (y << 16) | (x & 0xFFFF)
+        if button == "right":
+            down, up = win32con.WM_RBUTTONDOWN, win32con.WM_RBUTTONUP
+        elif button == "middle":
+            down, up = win32con.WM_MBUTTONDOWN, win32con.WM_MBUTTONUP
+        else:
+            down, up = win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP
+        win32gui.PostMessage(hwnd, down, 1, lparam)
+        win32gui.PostMessage(hwnd, up, 0, lparam)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
+def _guard_foreground(prev_hwnd: int, target_hwnd: int, duration: float = 0.5) -> None:
+    """前台守护:轮询检测目标窗口是否自激活,是则恢复原前台。
+
+    部分应用(微信)收到消息后**延迟异步**激活自己,单次检查抓不住,
+    因此轮询整个 duration 窗口(不能因"当前仍是原前台"提前退出 —
+    延迟激活可能发生在消息处理之后的任意时刻),一旦发现 target
+    抢占前台立即恢复 prev。
+    """
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < duration:
+        cur = win32gui.GetForegroundWindow()
+        if cur == target_hwnd:
+            _restore_foreground(prev_hwnd)
+            return
+        if cur == prev_hwnd:
+            time.sleep(0.05)
+            continue  # 仍为原前台,继续等(延迟激活可能稍后发生)
+        time.sleep(0.05)
 
 
 def post_key(hwnd: int, vk: int) -> bool:
@@ -51,6 +178,19 @@ def post_key(hwnd: int, vk: int) -> bool:
 # ─── 前台输入:SetCursorPos + mouse_event + keybd_event ───
 
 user32 = ctypes.windll.user32
+
+
+def window_from_point(x: int, y: int) -> Optional[int]:
+    """返回屏幕坐标 (x, y) 处的顶层窗口句柄(无则 None)。
+
+    用于把"屏幕绝对坐标"换算为"某个窗口的客户区坐标"的桥:
+    拿到 hwnd 后,客户区坐标 = (x - 窗口left, y - 窗口top),可走 post_click。
+    """
+    try:
+        h = win32gui.WindowFromPoint((x, y))
+        return h if h else None
+    except Exception:
+        return None
 
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
@@ -192,6 +332,36 @@ def hotkey(*vks: int) -> None:
         time.sleep(0.02)
 
 
+# ─── 行级点击:bbox → 中心 → 后台 → verify → 升级 ───
+
+def click_row(
+    hwnd: int,
+    row_bbox: tuple,
+    button: str = "left",
+    verify: Optional[callable] = None,
+) -> bool:
+    """点击"行"(可点击控件单元)的中心点。
+
+    设计依据(实测验证):会话列表项 = 整行可点击控件,
+    会话名与消息预览同处一行,点击行内任意点均选中该行。
+    因此只需行 bbox(由 perceive.cluster_rows 提供),
+    取中心点点击即可,避免"精确识别会话名"的 OCR 歧义。
+
+    Args:
+        hwnd: 目标窗口句柄。
+        row_bbox: 行区域 (x, y, w, h),窗口客户区坐标系。
+        button: "left" / "right" / "middle"。
+        verify: 可选生效判定回调 verify(hwnd) -> bool;
+                后台点击无效时自动升级前台点击(仍点中心)。
+
+    Returns:
+        True 表示已发出点击(有 verify 时表示最终生效)。
+    """
+    x, y, w, h = row_bbox
+    cx, cy = x + w // 2, y + h // 2
+    return click_with_escalation(hwnd, cx, cy, button=button, verify=verify)
+
+
 # ─── Unicode 文本输入(替换剪贴板方案) ───
 
 def type_text(text: str, interval: float = 0.02) -> None:
@@ -205,19 +375,149 @@ def type_text(text: str, interval: float = 0.02) -> None:
         time.sleep(interval)
 
 
-def type_text_bg(hwnd: int, text: str) -> bool:
+def type_text_bg(hwnd: int, text: str, restore_focus: bool = True) -> bool:
     """后台向窗口发送文本(WM_CHAR 逐字符,不抢焦点)。
 
     注意:仅对处理 WM_CHAR 的标准控件可靠,自绘控件可能不响应。
+    部分应用(如微信)收到 WM_CHAR 后会自激活,restore_focus=True
+    时输入后自动恢复原前台窗口(前台守护)。
+
+    Args:
+        hwnd: 目标窗口句柄。
+        text: 要输入的文本。
+        restore_focus: 输入后若目标应用自激活,恢复点击前的前台窗口。
+
+    Returns:
+        True = 已发送全部字符。
+    """
+    global _restore_lock
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        for ch in text:
+            win32gui.PostMessage(hwnd, win32con.WM_CHAR, ord(ch), 0)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
+# ─── 输入模式判别(前置预判,避免试错) ───
+# 实测结论:
+#   Qt5* 窗口(微信)            → bg:后台 WM_CHAR 可靠
+#   Tauri/Chrome_WidgetWin_1   → foreground:WebView2 输入框在渲染进程,
+#                                PostMessage 到主窗口被丢弃,必须前台
+#   UWP CoreWindow / 游戏/DX   → foreground:合成渲染,不走标准消息处理
+#   标准 Win32(Edit/Notepad)   → bg:WM_CHAR 天然支持
+
+_WEBVIEW_CLASS_KEYWORDS = ("tauri", "chrome_widgetwin", "cef-osc", "webview")
+_FOREGROUND_CLASS_KEYWORDS = (
+    "direct3d", "sdl_app", "unitywnd", "gamewindow", "corewindow",
+    "dxwnd", "overlay", "gametop", "mfcgame", "opengl",
+)
+_BG_CLASS_PREFIXES = ("qt", "edit", "button", "combolbox", "listbox",
+                      "notepad", "consolewindow", "static", "msctls")
+_BG_CLASS_EXACT = {"notepad", "edit", "button", "static", "syslistview32"}
+
+
+def _class_of(hwnd: int) -> str:
+    try:
+        return win32gui.GetClassName(hwnd) or ""
+    except Exception:
+        return ""
+
+
+def is_webview(hwnd: int) -> bool:
+    """窗口是否为 WebView 内核(Tauri/Chromium/CEF)。
+
+    WebView 应用的输入框是 HTML 元素,焦点在渲染进程,
+    PostMessage 到主窗口无法到达输入框 → 需要前台输入。
+    """
+    cls = _class_of(hwnd).lower()
+    return any(k in cls for k in _WEBVIEW_CLASS_KEYWORDS)
+
+
+def detect_input_mode(hwnd: int) -> str:
+    """判别窗口输入模式:"bg"(后台可靠)/ "foreground"(需前台)。
+
+    基于窗口类名(实测特征):
+      WebView(Tauri/Chrome_WidgetWin_1/CEF)→ foreground
+      游戏/DX/UWP CoreWindow              → foreground
+      Qt / 标准 Win32 控件                  → bg
+      未知                                → bg(后台尝试 + verify 兜底)
+    """
+    cls = _class_of(hwnd).lower()
+    if not cls:
+        return "bg"
+    # WebView:输入焦点在渲染进程,后台消息到不了输入框
+    if any(k in cls for k in _WEBVIEW_CLASS_KEYWORDS):
+        return "foreground"
+    # 游戏/合成渲染:不走标准消息处理
+    if any(k in cls for k in _FOREGROUND_CLASS_KEYWORDS):
+        return "foreground"
+    # Qt:主窗口自己处理消息(微信已验证后台可靠)
+    if cls.startswith("qt"):
+        return "bg"
+    # 标准 Win32 控件
+    if cls in _BG_CLASS_EXACT or cls.startswith(("edit", "button", "msctls")):
+        return "bg"
+    return "bg"
+
+
+def type_text_smart(hwnd: int, text: str) -> bool:
+    """按输入模式自动选择注入路径(阶梯):
+
+      bg 模式        → type_text_bg(后台 WM_CHAR,不抢焦点)
+      foreground 模式 → 短暂激活(Lock 保护)+ SendInput UNICODE → 恢复前台
+
+    Returns:
+        True = 已发送全部字符。
     """
     if not hwnd or not win32gui.IsWindow(hwnd):
         return False
-    for ch in text:
-        win32gui.PostMessage(hwnd, win32con.WM_CHAR, ord(ch), 0)
-    return True
+    mode = detect_input_mode(hwnd)
+    if mode == "foreground":
+        # 短暂激活:记住原前台 → 激活目标(先解锁,Lock 会阻止激活)
+        # → 注入 → 恢复原前台
+        prev = win32gui.GetForegroundWindow()
+        try:
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            try:
+                win32gui.SetForegroundWindow(hwnd)
+            except Exception:
+                # SetForegroundWindow 受限时用 AttachThreadInput 借用权限
+                try:
+                    cur = win32gui.GetForegroundWindow()
+                    cur_tid = win32process.GetWindowThreadProcessId(cur)[0]
+                    tgt_tid = win32process.GetWindowThreadProcessId(hwnd)[0]
+                    user32.AttachThreadInput(cur_tid, tgt_tid, True)
+                    win32gui.SetForegroundWindow(hwnd)
+                    user32.AttachThreadInput(cur_tid, tgt_tid, False)
+                except Exception:
+                    pass
+            time.sleep(0.2)
+            type_text(text)
+        finally:
+            if prev and prev != hwnd and win32gui.IsWindow(prev):
+                try:
+                    win32gui.SetForegroundWindow(prev)
+                except Exception:
+                    pass
+        return True
+    # bg 模式:纯后台(加 Lock 防微信等自激活)
+    lock_foreground()
+    try:
+        return type_text_bg(hwnd, text, restore_focus=False)
+    finally:
+        unlock_foreground()
 
 
-# ─── 阶梯策略:verify → escalate ───
+
 
 def click_with_escalation(
     hwnd: int,
