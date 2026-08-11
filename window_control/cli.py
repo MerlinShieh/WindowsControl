@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 
-from . import actions, api, input, screen, perceive, games, verify, uia, commands
+from . import actions, api, input, screen, perceive, games, verify, uia, commands, vision, agent
 
 
 def _print(obj, as_json: bool):
@@ -102,6 +102,9 @@ def main(argv=None) -> int:
 
     p_run = sub.add_parser("run", help="快速路径:解析中文指令并执行")
     p_run.add_argument("--text", type=str, required=True, help="自然语言指令,如:最小化微信")
+
+    p_agent = sub.add_parser("agent", help="Agent 入口:双速分流(快路径正则/深路径LLM)")
+    p_agent.add_argument("--text", type=str, required=True, help="自然语言指令")
 
     args = p.parse_args(argv)
 
@@ -238,6 +241,11 @@ def main(argv=None) -> int:
 
     if args.cmd == "run":
         result = commands.execute(args.text)
+        _print(result.to_dict(), as_json)
+        return 0 if result.ok else 1
+
+    if args.cmd == "agent":
+        result = agent.run(args.text)
         _print(result.to_dict(), as_json)
         return 0 if result.ok else 1
 

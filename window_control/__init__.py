@@ -13,7 +13,7 @@ from .api import (
     process_name_of,
     process_path_of,
 )
-from . import actions, screen, input, perceive, games, verify, uia, commands, vision
+from . import actions, screen, input, perceive, games, verify, uia, commands, vision, agent
 
 __version__ = "0.1.0"
 __all__ = [
@@ -34,4 +34,5 @@ __all__ = [
     "uia",
     "commands",
     "vision",
+    "agent",
 ]
