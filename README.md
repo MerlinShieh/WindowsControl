@@ -105,6 +105,20 @@ window_control_core/
   **项目代码本身保持 MIT**,模型权重按 AGPL-3.0 条款使用(使用方须遵循 AGPL 对模型权重的约束)。
 - OCR 使用 rapidocr-onnxruntime(Apache-2.0 许可),无额外约束。
 
+**图标检测模型下载地址**(首次运行自动下载,也可手动下载放入 `models/`):
+
+```
+主地址(hf-mirror,国内可达):
+https://hf-mirror.com/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/onnx/model.onnx
+
+官方源(huggingface.co,主地址不可达时):
+https://huggingface.co/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/onnx/model.onnx
+```
+
+- 下载后保存为 `models/icon_detect_v2.onnx`(约 80MB),代码自动加载;
+- 旧版量化模型 `models/icon_detect.onnx`(约 3.2MB)仍兼容(自动回退);
+- 模型为 **AGPL-3.0 许可**,仅用于界面元素检测(见上方声明)。
+
 > 若你计划闭源/商用且需规避 AGPL 约束,可删除 `models/` 下的模型文件 —
 > `detect_icons` 会优雅降级为纯 OCR 模式(功能不受影响,仅失去无文字图标定位能力),
 > 或替换为自训的宽松许可模型(见 `.hermes/plans/nuphus-perceive-upgrade.md` 路径 B)。
