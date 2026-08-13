@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from window_control import agent  # noqa: E402
+from assistant import agent  # noqa: E402
 
 
 def _wm(text, conf=0.99, bbox=(100, 200, 40, 20)):
@@ -22,8 +22,8 @@ class TestClickInWindow(unittest.TestCase):
     def test_happy_path(self):
         with mock.patch("window_control.api.find_windows") as fw, \
              mock.patch("window_control.perceive.ocr_window") as ow, \
-             mock.patch("window_control.agent.wc_input.click_row") as cr, \
-             mock.patch("window_control.agent.wc_input.foreground_lock"):
+             mock.patch("assistant.agent.wc_input.click_row") as cr, \
+             mock.patch("assistant.agent.wc_input.foreground_lock"):
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe", rect=(0, 0, 100, 100), visible=True)]
             ow.return_value = ([_wm("发送", bbox=(500, 800, 40, 28))], (0, 0))
             r = agent._tool_click_in_window({"window": "微信", "text": "发送"})
@@ -52,9 +52,9 @@ class TestClickRow(unittest.TestCase):
     def test_happy_path(self):
         with mock.patch("window_control.api.find_windows") as fw, \
              mock.patch("window_control.perceive.locate_row_in_window") as lr, \
-             mock.patch("window_control.agent.win32gui.GetWindowRect",
+             mock.patch("assistant.agent.win32gui.GetWindowRect",
                         return_value=(0, 0, 1095, 1006)), \
-             mock.patch("window_control.agent.wc_input.click_row") as cr:
+             mock.patch("assistant.agent.wc_input.click_row") as cr:
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe",
                                                     rect=(0, 0, 1095, 1006), visible=True)]
             from window_control.perceive import RowMatch
@@ -66,7 +66,7 @@ class TestClickRow(unittest.TestCase):
     def test_no_rows(self):
         with mock.patch("window_control.api.find_windows") as fw, \
              mock.patch("window_control.perceive.locate_row_in_window", return_value=[]), \
-             mock.patch("window_control.agent.win32gui.GetWindowRect",
+             mock.patch("assistant.agent.win32gui.GetWindowRect",
                         return_value=(0, 0, 1095, 1006)):
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe",
                                                     rect=(0, 0, 1095, 1006), visible=True)]
@@ -105,9 +105,9 @@ class TestClickTextUpgraded(unittest.TestCase):
     def test_uses_post_click_not_click(self):
         with mock.patch("window_control.perceive.locate_text_on_screen",
                         return_value=[_wm("发送")]), \
-             mock.patch("window_control.agent.wc_input.click") as old_click, \
-             mock.patch("window_control.agent.wc_input.post_click") as bg_click, \
-             mock.patch("window_control.agent.wc_input.foreground_lock"):
+             mock.patch("assistant.agent.wc_input.click") as old_click, \
+             mock.patch("assistant.agent.wc_input.post_click") as bg_click, \
+             mock.patch("assistant.agent.wc_input.foreground_lock"):
             r = agent._tool_click_text({"text": "发送"})
             self.assertTrue(r["ok"])
             old_click.assert_not_called()  # 不再前台点击
@@ -123,13 +123,13 @@ class TestTypeTextUpgraded(unittest.TestCase):
     """type_text 升级:前台 type_text → 后台 type_text_bg。"""
 
     def test_uses_type_text_bg(self):
-        with mock.patch("window_control.agent.wc_input.type_text") as old_tt, \
-             mock.patch("window_control.agent.wc_input.type_text_bg") as bg_tt, \
-             mock.patch("window_control.agent.wc_input.window_from_point",
+        with mock.patch("assistant.agent.wc_input.type_text") as old_tt, \
+             mock.patch("assistant.agent.wc_input.type_text_bg") as bg_tt, \
+             mock.patch("assistant.agent.wc_input.window_from_point",
                         return_value=777), \
-             mock.patch("window_control.agent.win32gui.GetWindowText",
+             mock.patch("assistant.agent.win32gui.GetWindowText",
                         return_value="前台窗口"), \
-             mock.patch("window_control.agent.wc_input.foreground_lock"):
+             mock.patch("assistant.agent.wc_input.foreground_lock"):
             r = agent._tool_type_text({"text": "你好"})
             self.assertTrue(r["ok"])
             old_tt.assert_not_called()
@@ -139,8 +139,8 @@ class TestTypeTextUpgraded(unittest.TestCase):
 
     def test_with_window_targets_hwnd(self):
         with mock.patch("window_control.api.find_windows") as fw, \
-             mock.patch("window_control.agent.wc_input.type_text_bg") as bg_tt, \
-             mock.patch("window_control.agent.wc_input.foreground_lock"):
+             mock.patch("assistant.agent.wc_input.type_text_bg") as bg_tt, \
+             mock.patch("assistant.agent.wc_input.foreground_lock"):
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe",
                                                     rect=(0, 0, 100, 100), visible=True)]
             r = agent._tool_type_text({"text": "你好", "window": "微信"})
@@ -164,8 +164,8 @@ class TestLookScreenWindow(unittest.TestCase):
         with mock.patch("window_control.api.find_windows") as fw, \
              mock.patch("window_control.screen.capture_window") as cw, \
              mock.patch("window_control.perceive.ocr_image", return_value=[]), \
-             mock.patch("window_control.vision.analyze_image") as va, \
-             mock.patch("window_control.agent.os.unlink"):
+             mock.patch("assistant.vision.analyze_image") as va, \
+             mock.patch("assistant.agent.os.unlink"):
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe", rect=(0, 0, 100, 100), visible=True)]
             cw.return_value = "w.png"
             va.return_value = agent.vision.VisionResult(description="窗口内容")
@@ -185,8 +185,8 @@ class TestLookScreenWindow(unittest.TestCase):
                         return_value=[agent.perceive.ElementMatch(
                             kind="icon", bbox=(10, 10, 20, 20), cls="icon",
                             confidence=0.8)]), \
-             mock.patch("window_control.vision.analyze_image") as va, \
-             mock.patch("window_control.agent.os.unlink"):
+             mock.patch("assistant.vision.analyze_image") as va, \
+             mock.patch("assistant.agent.os.unlink"):
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe",
                                                     rect=(0, 0, 100, 100), visible=True)]
             va.return_value = agent.vision.VisionResult(description="窗口")
@@ -201,8 +201,8 @@ class TestLookScreenWindow(unittest.TestCase):
              mock.patch("window_control.screen.capture_window"), \
              mock.patch("window_control.perceive.ocr_image", return_value=[]), \
              mock.patch("window_control.perceive.detect_icons") as di, \
-             mock.patch("window_control.vision.analyze_image") as va, \
-             mock.patch("window_control.agent.os.unlink"):
+             mock.patch("assistant.vision.analyze_image") as va, \
+             mock.patch("assistant.agent.os.unlink"):
             fw.return_value = [agent.api.WindowInfo(123, "微信", 999, "weixin.exe",
                                                     rect=(0, 0, 100, 100), visible=True)]
             va.return_value = agent.vision.VisionResult(description="窗口")

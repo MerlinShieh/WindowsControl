@@ -8,7 +8,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from window_control import perceive, vision  # noqa: E402
+from window_control import perceive  # noqa: E402
+from assistant import vision  # noqa: E402  产品层
 
 
 class TestVisionResult(unittest.TestCase):
@@ -19,11 +20,11 @@ class TestVisionResult(unittest.TestCase):
         self.assertEqual(d["confidence"], 0.9)
 
     def test_vision_available_no_key(self):
-        with mock.patch("window_control.vision.VISION_KEY", ""):
+        with mock.patch("assistant.vision.VISION_KEY", ""):
             self.assertFalse(vision.vision_available())
 
     def test_analyze_screen_no_key(self):
-        with mock.patch("window_control.vision.VISION_KEY", ""):
+        with mock.patch("assistant.vision.VISION_KEY", ""):
             r = vision.analyze_screen("有什么?")
             self.assertIn("未配置", r.description)
             self.assertEqual(r.confidence, 0.0)

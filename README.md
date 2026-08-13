@@ -1,7 +1,27 @@
-# 窗口控制内核 (Window Control Core)
+# Window Control Core(窗口控制内核)
 
-全局 AI 助手项目的**窗口控制模块** — 屏幕获取、窗口探测、键鼠模拟的统一封装。
-基于 Win32 API(pywin32 + Pillow),零后台服务依赖,可直接被 AI 助手以命令行或 Python API 方式调用。
+**纯 Windows 窗口控制内核库** — 屏幕获取、窗口探测、键鼠模拟(后台化)的统一封装。
+基于 Win32 API(pywin32 + Pillow),零后台服务依赖、零 LLM 依赖,可直接被任意
+AI 助手/自动化程序以命令行或 Python API 方式调用。**这是本项目的主体。**
+
+## 项目结构:两个层的说明
+
+本仓库当前容纳**两个层**(后续将拆分为两个独立仓库):
+
+```
+window_control_core/
+├── window_control/   ← ① 内核层(本项目主体,Windows Control Core)
+│     纯 Win32 控制:api/actions/input/screen/perceive/verify/uia/games/dpi...
+│     零 LLM 依赖,可独立 pip 安装、被任意程序引用
+└── assistant/        ← ② 产品层(桌面 AI 助手雏形,后续独立为 global-ai-assistant)
+      agent.py(LLM 工具循环)/ vision.py(视觉分析)/ ui/(对话窗+托盘)/ main.py
+      **依赖 window_control,反向不依赖**
+```
+
+- **内核层 = 本项目的核心资产**:后台键鼠控制(PostMessage + Lock 前台锁定)、
+  OCR 精度层、YOLO 图标检测、最小化窗口恢复等 — 市面 Agent Harness 的盲区。
+- **产品层 = 基于内核的完整 AI 助手雏形**:后续在此收敛成熟后,切割为
+  独立仓库 `global-ai-assistant`(三模式/语音/打包等产品能力在其仓库内演进)。
 
 ## 背景
 
@@ -71,18 +91,26 @@ p = screen.capture_screen("shot.png")
 
 ```
 window_control_core/
-├── window_control/
-│   ├── __init__.py     # 公开 API 汇总
-│   ├── api.py          # 窗口探测:枚举/前台/Z序/进程解析
-│   ├── actions.py      # 窗口操作:最小化/最大化/恢复/关闭/置前 + 游戏防护
-│   ├── screen.py       # 屏幕获取:全屏合成画面 + PrintWindow 单窗口
-│   ├── input.py        # 键鼠模拟:后台 PostMessage + 前台 SendInput + Unicode 注入 + 阶梯升级
-│   ├── perceive.py     # OCR 精度层:locate_text 定位屏幕文字(rapidocr)
-│   ├── games.py        # 游戏/反作弊进程检测(高风险窗口默认禁操作)
-│   ├── verify.py       # 操作后验证:文字出现/消失闭环确认
-│   ├── uia.py          # UIA 机会型加速器:find/set_text/invoke
-│   └── cli.py          # argparse 命令行入口
-├── tests/test_core.py  # 自检脚本
+├── window_control/          # ① 内核层(纯 Win32 控制)
+│   ├── __init__.py          # 公开 API 汇总(仅内核)
+│   ├── api.py               # 窗口探测:枚举/前台/Z序/进程解析 + ensure_window_ready(最小化恢复)
+│   ├── actions.py           # 窗口操作:最小化/最大化/恢复/关闭/置前 + 游戏防护
+│   ├── screen.py            # 屏幕获取:PrintWindow 后台单窗口 + capture_window_by_rect(前台)
+│   ├── input.py             # 键鼠输入:后台 PostMessage + Lock 前台锁定 + type_text_smart 阶梯 + Unicode
+│   ├── perceive.py          # OCR 精度层(locate_text) + YOLO 图标检测 + IoU 合并 + 类型推断
+│   ├── verify.py            # 操作后验证:region_diff/screenshot_changed/wait_stable
+│   ├── uia.py               # UIA 机会型加速器:find/set_text/invoke
+│   ├── games.py             # 游戏/反作弊进程检测
+│   ├── dpi.py               # DPI 感知声明(导入即生效)
+│   ├── hotkey.py            # 全局热键注册
+│   ├── commands.py          # 中文指令快速解析(正则路径)
+│   └── cli.py               # CLI 入口(list/click/type/locate/verify/uia/run...)
+├── assistant/               # ② 产品层(桌面 AI 助手雏形,后续独立仓库)
+│   ├── agent.py             # LLM 工具循环(深度路径 function calling)
+│   ├── vision.py            # 视觉分析(mimo-v2.5)
+│   ├── ui/                  # Tkinter 对话窗口 + 托盘
+│   ├── main.py              # 产品入口(托盘+热键+对话窗)
+├── tests/                   # 单元测试(内核 + 产品层)
 └── requirements.txt
 ```
 

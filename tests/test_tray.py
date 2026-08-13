@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TestTray(unittest.TestCase):
     def test_import(self):
-        from window_control.ui import tray
+        from assistant.ui import tray
 
         self.assertTrue(hasattr(tray, "TrayIcon"))
 
@@ -19,7 +19,7 @@ class TestTray(unittest.TestCase):
         """start() 应创建 pystray.Icon 并启动线程(pystray 为延迟导入)。"""
         import sys as _sys
 
-        from window_control.ui import tray
+        from assistant.ui import tray
 
         icon = tray.TrayIcon(on_show=lambda: None, on_quit=lambda: None)
         fake_pystray = mock.Mock()
@@ -33,7 +33,7 @@ class TestTray(unittest.TestCase):
         try:
             with mock.patch("PIL.Image.new") as img_new:
                 img_new.return_value = mock.Mock()
-                with mock.patch("window_control.ui.tray.threading.Thread") as thr:
+                with mock.patch("assistant.ui.tray.threading.Thread") as thr:
                     icon.start()
                     fake_pystray.Icon.assert_called_once()
                     self.assertTrue(thr.call_args.kwargs.get("daemon"))
@@ -45,7 +45,7 @@ class TestTray(unittest.TestCase):
 
     def test_tray_start_without_pystray(self):
         """pystray 不可用时 start 抛 ImportError(产品层会捕获)。"""
-        from window_control.ui import tray
+        from assistant.ui import tray
 
         icon = tray.TrayIcon()
         with mock.patch("builtins.__import__", side_effect=ImportError("no pystray")):
@@ -53,7 +53,7 @@ class TestTray(unittest.TestCase):
                 icon.start()
 
     def test_on_quit_stops_icon(self):
-        from window_control.ui import tray
+        from assistant.ui import tray
 
         icon = tray.TrayIcon()
         icon._icon = mock.Mock()
@@ -61,7 +61,7 @@ class TestTray(unittest.TestCase):
         icon._icon.stop.assert_called_once()
 
     def test_running_false_initial(self):
-        from window_control.ui import tray
+        from assistant.ui import tray
 
         icon = tray.TrayIcon()
         self.assertFalse(icon.running)
@@ -74,7 +74,7 @@ class TestMain(unittest.TestCase):
 
         spec = importlib.util.spec_from_file_location(
             "assistant_main", os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"))
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assistant", "main.py"))
         mod = importlib.util.module_from_spec(spec)
         self.assertTrue(spec is not None)
         self.assertTrue(hasattr(spec, "loader"))
@@ -84,7 +84,7 @@ class TestMain(unittest.TestCase):
 
         spec = importlib.util.spec_from_file_location(
             "assistant_main", os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"))
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assistant", "main.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         self.assertEqual(mod.DEFAULT_HOTKEY, "ctrl+alt+space")

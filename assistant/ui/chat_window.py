@@ -18,7 +18,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 from typing import Optional
 
-from .. import agent, commands
+from assistant import agent  # noqa: E402  产品层
+from window_control import commands  # noqa: E402  内核层
 
 APP_TITLE = "全局 AI 助手"
 WELCOME = ("欢迎使用全局 AI 助手 👋\n"

@@ -11,13 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TestChatWindowImport(unittest.TestCase):
     def test_import(self):
-        from window_control.ui import chat_window
+        from assistant.ui import chat_window
 
         self.assertTrue(hasattr(chat_window, "ChatWindow"))
         self.assertTrue(hasattr(chat_window, "APP_TITLE"))
 
     def test_welcome_contains_commands(self):
-        from window_control.ui.chat_window import WELCOME
+        from assistant.ui.chat_window import WELCOME
 
         for kw in ["打开", "最小化", "点", "输入", "截图", "选择文件"]:
             self.assertIn(kw, WELCOME)
@@ -27,7 +27,7 @@ class TestChatWindowLogic(unittest.TestCase):
     """不开真实 Tk 窗口,用 mock root 测消息渲染/队列逻辑。"""
 
     def _make_window(self):
-        from window_control.ui import chat_window
+        from assistant.ui import chat_window
 
         fake_root = mock.Mock()
         # 模拟 pack/geometry/protocol/after
@@ -68,7 +68,7 @@ class TestChatWindowLogic(unittest.TestCase):
         fake_result = mock.Mock(path="fast", ok=True, answer="已启动",
                                 steps=[])
         with mock.patch.object(win._queue, "put") as put, \
-             mock.patch("window_control.ui.chat_window.agent") as agent_mod:
+             mock.patch("assistant.ui.chat_window.agent") as agent_mod:
             agent_mod.run.return_value = fake_result
             win._worker("打开 计算器", "")
             put.assert_called_once()
@@ -77,7 +77,7 @@ class TestChatWindowLogic(unittest.TestCase):
     def test_worker_queues_error(self):
         win, _ = self._make_window()
         with mock.patch.object(win._queue, "put") as put, \
-             mock.patch("window_control.ui.chat_window.agent") as agent_mod:
+             mock.patch("assistant.ui.chat_window.agent") as agent_mod:
             agent_mod.run.side_effect = RuntimeError("boom")
             win._worker("x", "")
             kind, payload = put.call_args.args[0]
@@ -86,14 +86,14 @@ class TestChatWindowLogic(unittest.TestCase):
 
     def test_render_fast_result(self):
         win, _ = self._make_window()
-        from window_control.agent import AgentResult
+        from assistant.agent import AgentResult
 
         r = AgentResult(True, answer="已启动 计算器", path="fast", steps=[])
         win._render_result(r)
 
     def test_confirm_delegates(self):
         win, _ = self._make_window()
-        with mock.patch("window_control.ui.chat_window.messagebox") as mb:
+        with mock.patch("assistant.ui.chat_window.messagebox") as mb:
             mb.askokcancel.return_value = True
             self.assertTrue(win._confirm("确认?"))
 

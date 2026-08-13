@@ -15,9 +15,9 @@ import sys
 # 允许从项目根直接运行 python main.py
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from window_control import hotkey as hk  # noqa: E402
-from window_control.ui.chat_window import ChatWindow  # noqa: E402
-from window_control.ui.tray import TrayIcon  # noqa: E402
+from assistant.ui.chat_window import ChatWindow  # noqa: E402  产品层
+from assistant.ui.tray import TrayIcon  # noqa: E402  产品层
+from window_control import hotkey as hk  # noqa: E402  内核层
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs", "assistant.log")
 DEFAULT_HOTKEY = "ctrl+alt+space"

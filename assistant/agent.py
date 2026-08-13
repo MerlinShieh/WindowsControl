@@ -23,7 +23,15 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from . import actions, api, commands, input as wc_input, perceive, screen, vision
+from window_control import (  # noqa: E402  内核层
+    actions,
+    api,
+    commands,
+    input as wc_input,
+    perceive,
+    screen,
+)
+from . import vision
 import win32api  # noqa: E402
 import win32con  # noqa: E402
 import win32gui  # noqa: E402

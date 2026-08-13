@@ -8,7 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from window_control import agent  # noqa: E402
+from assistant import agent  # noqa: E402
 
 
 class TestClassify(unittest.TestCase):
@@ -37,7 +37,7 @@ class TestRunFast(unittest.TestCase):
             m.assert_called_once_with("打开 计算器")
 
     def test_run_deep_no_key(self):
-        with mock.patch("window_control.agent.LLM_KEY", ""):
+        with mock.patch("assistant.agent.LLM_KEY", ""):
             r = agent.run("帮我分析屏幕")
             self.assertFalse(r.ok)
             self.assertEqual(r.path, "deep")
@@ -55,7 +55,7 @@ class TestTools(unittest.TestCase):
     def test_tool_run_command_timeout(self):
         import subprocess as _sp
 
-        with mock.patch("window_control.agent.subprocess.run",
+        with mock.patch("assistant.agent.subprocess.run",
                         side_effect=_sp.TimeoutExpired("x", 1)):
             r = agent._tool_run_command({"command": "sleep 100", "timeout": 1})
             self.assertFalse(r["ok"])
@@ -84,12 +84,12 @@ class TestTools(unittest.TestCase):
 
         with mock.patch("window_control.perceive.locate_text_on_screen",
                         return_value=[TextMatch("发送", 0.99, (100, 200, 40, 20))]), \
-             mock.patch("window_control.agent.wc_input.window_from_point",
+             mock.patch("assistant.agent.wc_input.window_from_point",
                         return_value=12345), \
-             mock.patch("window_control.agent.win32gui.GetWindowRect",
+             mock.patch("assistant.agent.win32gui.GetWindowRect",
                         return_value=(0, 0, 1920, 1080)), \
-             mock.patch("window_control.agent.wc_input.post_click") as bg, \
-             mock.patch("window_control.agent.wc_input.foreground_lock"):
+             mock.patch("assistant.agent.wc_input.post_click") as bg, \
+             mock.patch("assistant.agent.wc_input.foreground_lock"):
             r = agent._tool_click_text({"text": "发送"})
             self.assertTrue(r["ok"])
             self.assertTrue(r["background"])
@@ -106,11 +106,11 @@ class TestTools(unittest.TestCase):
             self.assertFalse(r["ok"])
 
     def test_tool_type_text(self):
-        with mock.patch("window_control.agent.wc_input.type_text") as m, \
-             mock.patch("window_control.agent.wc_input.type_text_bg"), \
-             mock.patch("window_control.agent.wc_input.window_from_point",
+        with mock.patch("assistant.agent.wc_input.type_text") as m, \
+             mock.patch("assistant.agent.wc_input.type_text_bg"), \
+             mock.patch("assistant.agent.wc_input.window_from_point",
                         return_value=None), \
-             mock.patch("window_control.agent.wc_input.foreground_lock"):
+             mock.patch("assistant.agent.wc_input.foreground_lock"):
             r = agent._tool_type_text({"text": "你好"})
             self.assertTrue(r["ok"])
             m.assert_called_once_with("你好")
@@ -119,8 +119,8 @@ class TestTools(unittest.TestCase):
         with mock.patch("window_control.screen.capture_screen",
                         return_value="x.png"), \
              mock.patch("window_control.perceive.ocr_image", return_value=[]), \
-             mock.patch("window_control.vision.analyze_image") as va, \
-             mock.patch("window_control.agent.os.unlink"):
+             mock.patch("assistant.vision.analyze_image") as va, \
+             mock.patch("assistant.agent.os.unlink"):
             va.return_value = agent.vision.VisionResult(description="屏幕描述")
             r = agent._tool_look_screen({})
             self.assertTrue(r["ok"])

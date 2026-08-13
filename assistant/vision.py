@@ -18,7 +18,7 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from . import perceive, screen
+from window_control import perceive, screen  # noqa: E402  内核层
 
 # ─── 配置(环境变量,与 Hermes 共用 XIAOMI_API_KEY) ───
 VISION_BASE_URL = os.environ.get("XIAOMI_BASE_URL", "https://api.xiaomimimo.com/v1")
