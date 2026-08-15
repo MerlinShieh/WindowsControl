@@ -178,6 +178,33 @@ def minimize_topmost(exclude: Optional[List[str]] = None) -> Optional[WindowInfo
     return top if ok else None
 
 
+def move_window(hwnd: int, target: tuple, restore_focus: bool = True) -> bool:
+    """移动窗口到目标屏幕坐标(拖拽标题栏,与用户手动拖拽等价)。
+
+    窗口操作家族的一员(与 minimize/maximize/close 并列):
+    状态操作之外的位置操作。通用 API — 任意窗口可调,
+    供用户/其他 Agent 直接使用(如"把微信拖到右上角")。
+
+    实现:前台真实拖拽(窗口移动需系统模态循环 + 真实输入队列,
+    PostMessage 无法驱动,见 input.drag_window 注释)。
+
+    Args:
+        hwnd: 目标窗口。
+        target: (x, y) 目标位置(窗口左上角屏幕坐标)。
+        restore_focus: 操作后恢复原前台(默认 True,不打扰用户)。
+
+    Returns:
+        True = 已执行;移动是否生效由调用方 GetWindowRect 验证。
+    """
+    if not _is_valid(hwnd):
+        return False
+    if _guard_risky(hwnd):
+        return False
+    from . import input as wc_input
+
+    return wc_input.drag_window(hwnd, target, restore_focus=restore_focus)
+
+
 def find_and_minimize(title_contains: str = "") -> List[WindowInfo]:
     """按标题子串匹配并最小化所有命中的窗口,返回被操作的列表。"""
     done: List[WindowInfo] = []

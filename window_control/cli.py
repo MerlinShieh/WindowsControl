@@ -19,6 +19,8 @@ import argparse
 import json
 import sys
 
+import win32gui  # noqa: E402  (move 命令 GetWindowRect)
+
 from . import actions, api, screen, input, perceive, games, verify, uia, commands
 
 
@@ -59,6 +61,13 @@ def main(argv=None) -> int:
 
     p_close = sub.add_parser("close", help="关闭窗口")
     p_close.add_argument("--hwnd", type=int, required=True)
+
+    p_move = sub.add_parser("move", help="移动窗口到目标坐标(拖拽标题栏)")
+    p_move.add_argument("--hwnd", type=int, required=True)
+    p_move.add_argument("--x", type=int, required=True, help="目标 X(窗口左上角屏幕坐标)")
+    p_move.add_argument("--y", type=int, required=True, help="目标 Y")
+    p_move.add_argument("--no-restore-focus", action="store_true",
+                        help="操作后不恢复原前台")
 
     p_shot = sub.add_parser("screenshot", help="全屏截图")
     p_shot.add_argument("--out", type=str, default="screen.png")
@@ -152,6 +161,15 @@ def main(argv=None) -> int:
     if args.cmd == "close":
         ok = actions.close(args.hwnd)
         _print({"ok": ok, "hwnd": args.hwnd}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "move":
+        ok = actions.move_window(args.hwnd, (args.x, args.y),
+                                 restore_focus=not args.no_restore_focus)
+        r = win32gui.GetWindowRect(args.hwnd) if ok else None
+        _print({"ok": ok, "hwnd": args.hwnd,
+                "target": [args.x, args.y],
+                "rect": list(r) if r else None}, as_json)
         return 0 if ok else 1
 
     if args.cmd == "screenshot":

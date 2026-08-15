@@ -146,6 +146,177 @@ def post_click(
             _guard_foreground(prev, hwnd)
 
 
+# ─── 后台鼠标扩展:双击/长按/拖拽/滚动/移动 ───
+# 统一 Lock 守护(与 post_click 一致,防止目标应用自激活抢焦点)
+
+def _post_mouse_msg(hwnd: int, msg: int, x: int, y: int, wparam: int = 0) -> None:
+    """发送一条后台鼠标消息(客户区坐标)。"""
+    lparam = ((y & 0xFFFF) << 16) | (x & 0xFFFF)
+    win32gui.PostMessage(hwnd, msg, wparam, lparam)
+
+
+def post_double_click(
+    hwnd: int, x: int, y: int, button: str = "left",
+    restore_focus: bool = True,
+) -> bool:
+    """后台双击(WM_LBUTTONDBLCLK 序列),不抢焦点。
+
+    用于:双击打开文件/文件夹、双击重命名等。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    global _restore_lock
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        down, dblclk = {
+            "left": (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONDBLCLK),
+            "right": (win32con.WM_RBUTTONDOWN, win32con.WM_RBUTTONDBLCLK),
+            "middle": (win32con.WM_MBUTTONDOWN, win32con.WM_MBUTTONDBLCLK),
+        }.get(button, (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONDBLCLK))
+        up_map = {
+            win32con.WM_LBUTTONDOWN: win32con.WM_LBUTTONUP,
+            win32con.WM_RBUTTONDOWN: win32con.WM_RBUTTONUP,
+            win32con.WM_MBUTTONDOWN: win32con.WM_MBUTTONUP,
+        }
+        up = up_map[down]
+        # 标准双击序列:DOWN UP DOWN DBLCLK UP
+        _post_mouse_msg(hwnd, down, x, y, 1)
+        _post_mouse_msg(hwnd, up, x, y, 0)
+        _post_mouse_msg(hwnd, down, x, y, 1)
+        _post_mouse_msg(hwnd, dblclk, x, y, 1)
+        _post_mouse_msg(hwnd, up, x, y, 0)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
+def post_hold(
+    hwnd: int, x: int, y: int, duration: float = 1.0,
+    button: str = "left", restore_focus: bool = True,
+) -> bool:
+    """后台长按:按下并保持 duration 秒后松开。
+
+    用于:滑块拖动前的按住、长按手势、折叠菜单等。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    global _restore_lock
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        down, up = {
+            "left": (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP),
+            "right": (win32con.WM_RBUTTONDOWN, win32con.WM_RBUTTONUP),
+            "middle": (win32con.WM_MBUTTONDOWN, win32con.WM_MBUTTONUP),
+        }.get(button, (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP))
+        _post_mouse_msg(hwnd, down, x, y, 1)
+        time.sleep(duration)
+        _post_mouse_msg(hwnd, up, x, y, 0)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
+def post_drag(
+    hwnd: int, start: tuple, end: tuple, steps: int = 8,
+    button: str = "left", restore_focus: bool = True,
+) -> bool:
+    """后台拖拽:从 start 按下 → 逐步移动到 end → 松开。
+
+    用于:拖动文件/窗口、调整大小、滑块、选中文本等。
+
+    Args:
+        hwnd: 目标窗口。
+        start, end: (x, y) 客户区坐标。
+        steps: 中间插值步数(越大越平滑,默认 8)。
+        button: 左键拖拽(默认)/右键(选择移动)。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    if steps < 1:
+        steps = 1
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    global _restore_lock
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        down, up = {
+            "left": (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP),
+            "right": (win32con.WM_RBUTTONDOWN, win32con.WM_RBUTTONUP),
+            "middle": (win32con.WM_MBUTTONDOWN, win32con.WM_MBUTTONUP),
+        }.get(button, (win32con.WM_LBUTTONDOWN, win32con.WM_LBUTTONUP))
+        x1, y1 = start
+        x2, y2 = end
+        _post_mouse_msg(hwnd, down, x1, y1, 1)
+        for i in range(1, steps + 1):
+            mx = x1 + (x2 - x1) * i // steps
+            my = y1 + (y2 - y1) * i // steps
+            _post_mouse_msg(hwnd, win32con.WM_MOUSEMOVE, mx, my, 1)
+            time.sleep(0.01)
+        _post_mouse_msg(hwnd, up, x2, y2, 0)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
+def post_scroll(
+    hwnd: int, x: int, y: int, delta: int = 120,
+    restore_focus: bool = True,
+) -> bool:
+    """后台滚动(WM_MOUSEWHEEL),光标置于 (x, y) 处。
+
+    delta > 0 向上滚,< 0 向下滚(120 = 一格)。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    global _restore_lock
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        wparam = (delta & 0xFFFF) << 16  # 高 16 位 = 滚轮增量
+        _post_mouse_msg(hwnd, win32con.WM_MOUSEWHEEL, x, y, wparam)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
+def post_move(hwnd: int, x: int, y: int, restore_focus: bool = True) -> bool:
+    """后台移动鼠标(WM_MOUSEMOVE),触发 hover 效果,不抢焦点。
+
+    用于:悬停显示 tooltip、菜单展开、检查元素可交互性等。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    global _restore_lock
+    _restore_lock = prev if (restore_focus and prev and prev != hwnd) else _restore_lock
+    locked = lock_foreground() if restore_focus else False
+    try:
+        _post_mouse_msg(hwnd, win32con.WM_MOUSEMOVE, x, y, 0)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        elif restore_focus and prev and prev != hwnd:
+            _guard_foreground(prev, hwnd)
+
+
 def _guard_foreground(prev_hwnd: int, target_hwnd: int, duration: float = 0.5) -> None:
     """前台守护:轮询检测目标窗口是否自激活,是则恢复原前台。
 
@@ -285,8 +456,121 @@ def send_unicode_char(ch: str) -> None:
 
 
 def move_mouse(x: int, y: int) -> None:
-    """移动真实光标到屏幕坐标。"""
-    user32.SetCursorPos(x, y)
+    """移动真实鼠标光标到屏幕坐标 (x, y)。"""
+    import ctypes
+
+    ctypes.windll.user32.SetCursorPos(x, y)
+
+
+def _mouse_event(flags: int) -> None:
+    ctypes.windll.user32.mouse_event(flags, 0, 0, 0, 0)
+
+
+def drag(
+    start: tuple, end: tuple, steps: int = 20,
+    button: str = "left", interval: float = 0.03,
+) -> None:
+    """前台真实拖拽(系统级,窗口移动/文件拖放需此路径)。
+
+    ⚠️ 实测结论(2026-08-15):窗口移动依赖系统模态移动循环,
+    需要真实输入队列 — 后台 PostMessage(post_drag)无法驱动窗口移动,
+    必须走真实鼠标事件。会移动真实光标,调用方需自行处理焦点。
+
+    Args:
+        start, end: (x, y) 屏幕绝对坐标。
+        steps: 插值步数(默认 20,平滑)。
+        button: "left" / "right" / "middle"。
+        interval: 每步间隔秒。
+    """
+    from ctypes import windll
+
+    user32 = windll.user32
+    x1, y1 = start
+    x2, y2 = end
+    user32.SetCursorPos(x1, y1)
+    time.sleep(0.15)
+    down_flag = {"right": 0x0008, "middle": 0x0020}.get(button, 0x0002)
+    up_flag = {"right": 0x0010, "middle": 0x0040}.get(button, 0x0004)
+    user32.mouse_event(down_flag, 0, 0, 0, 0)
+    time.sleep(0.1)
+    for i in range(1, steps + 1):
+        mx = x1 + (x2 - x1) * i // steps
+        my = y1 + (y2 - y1) * i // steps
+        user32.SetCursorPos(mx, my)
+        time.sleep(interval)
+    user32.mouse_event(up_flag, 0, 0, 0, 0)
+
+
+def drag_window(hwnd: int, target: tuple, restore_focus: bool = True) -> bool:
+    """拖拽移动窗口到目标屏幕坐标(前台真实拖拽,自动处理焦点)。
+
+    流程:记录原前台 → Lock 内激活目标窗口 → SetCursorPos 标题栏
+    → 真实拖拽 → 恢复原前台。
+
+    Args:
+        hwnd: 目标窗口。
+        target: (x, y) 目标位置(窗口左上角屏幕坐标)。
+        restore_focus: 操作后恢复原前台。
+
+    Returns:
+        True = 已执行(移动是否生效由调用方 GetWindowRect 验证)。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    prev = win32gui.GetForegroundWindow() if restore_focus else None
+    # 激活目标(Lock 内 + AttachThreadInput 绕过前台锁定)
+    locked = lock_foreground() if restore_focus else False
+    try:
+        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)  # 若最小化先恢复
+        _activate_window(hwnd)
+        time.sleep(0.5)
+        l, t, r, b = win32gui.GetWindowRect(hwnd)
+        # 标题栏起始点:窗口顶部中央
+        start = (l + (r - l) // 2, t + 15)
+        tx, ty = target
+        # 目标 = 窗口左上角移到 target → 光标移动量 = target - (l,t)
+        end = (start[0] + (tx - l), start[1] + (ty - t))
+        drag(start, end)
+        time.sleep(0.3)
+        return True
+    finally:
+        if locked:
+            unlock_foreground()
+        # 恢复原前台(无论 Lock 与否)
+        if restore_focus and prev and prev != hwnd:
+            _restore_foreground(prev)
+
+
+def _activate_window(hwnd: int) -> None:
+    """激活窗口(AttachThreadInput 绕过前台锁定,同 actions.bring_to_front)。"""
+    try:
+        import win32api
+        import win32process
+
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        fg = win32gui.GetForegroundWindow()
+        cur_tid = win32api.GetCurrentThreadId()
+        fg_tid, _ = win32process.GetWindowThreadProcessId(fg)
+        tg_tid, _ = win32process.GetWindowThreadProcessId(hwnd)
+        try:
+            if fg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, fg_tid, True)
+            if tg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, tg_tid, True)
+            user32.SetForegroundWindow(hwnd)
+            user32.BringWindowToTop(hwnd)
+        finally:
+            if fg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, fg_tid, False)
+            if tg_tid != cur_tid:
+                user32.AttachThreadInput(cur_tid, tg_tid, False)
+    except Exception:
+        try:
+            win32gui.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
 
 
 def click(x: int, y: int, button: str = "left", move_first: bool = True) -> None:
