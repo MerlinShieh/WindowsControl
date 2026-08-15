@@ -97,6 +97,7 @@ window_control_core/
 │   ├── actions.py           # 窗口操作:最小化/最大化/恢复/关闭/置前 + 游戏防护
 │   ├── screen.py            # 屏幕获取:PrintWindow 后台单窗口 + capture_window_by_rect(前台)
 │   ├── input.py             # 键鼠输入:后台 PostMessage + Lock 前台锁定 + type_text_smart 阶梯 + Unicode
+│   │                        #   + 操作级判别 detect_action_mode(右键/拖拽=前台,点击/输入=后台)
 │   ├── perceive.py          # OCR 精度层(locate_text) + YOLO 图标检测 + IoU 合并 + 类型推断
 │   ├── verify.py            # 操作后验证:region_diff/screenshot_changed/wait_stable
 │   ├── uia.py               # UIA 机会型加速器:find/set_text/invoke

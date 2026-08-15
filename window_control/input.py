@@ -753,6 +753,49 @@ def detect_input_mode(hwnd: int) -> str:
     return "bg"
 
 
+# ─── 操作级输入模式判别 ───
+# 实测(2026-08-15):部分交互"无论什么窗口"都必须前台 —
+#   右键菜单(context menu):Qt 只在前台窗口响应,PostMessage 右键不弹菜单
+#   窗口拖拽(移动):依赖系统模态移动循环 + 真实输入队列
+# 规则优先级:操作类型 > 窗口类型(detect_input_mode)
+
+# 必须前台的操作(系统级/模态交互)
+_OP_ALWAYS_FOREGROUND = {
+    "right_click",      # 右键菜单(实测:微信后台右键不弹菜单)
+    "context_menu",     # WM_CONTEXTMENU 同规则
+    "drag_window",      # 拖拽移动窗口(系统模态循环)
+    "drag_titlebar",    # 标题栏拖拽(同上)
+    "dblclk_right",     # 右键双击
+}
+
+# 可后台的操作(应用内交互,Qt/Win32 自己处理消息)
+_OP_BG_OK = {
+    "click", "dblclk", "hold", "scroll", "move",
+    "type", "type_bg", "key",
+}
+
+
+def detect_action_mode(operation: str, hwnd: int) -> str:
+    """判别"某个操作在目标窗口上"的输入模式:"bg" / "foreground"。
+
+    操作级规则优先(系统级交互必须前台),窗口级规则兜底:
+      1. 操作 ∈ 必须前台集(right_click/drag_window/...)→ foreground
+      2. 否则按窗口类型判别(detect_input_mode)
+      3. 未知操作 → 按窗口类型
+
+    Args:
+        operation: "click"/"right_click"/"drag_window"/"type"/... 见 _OP_* 集。
+        hwnd: 目标窗口。
+
+    Returns:
+        "bg" 或 "foreground"。
+    """
+    op = (operation or "").lower()
+    if op in _OP_ALWAYS_FOREGROUND:
+        return "foreground"
+    return detect_input_mode(hwnd)
+
+
 def type_text_smart(hwnd: int, text: str) -> bool:
     """按输入模式自动选择注入路径(阶梯):
 
