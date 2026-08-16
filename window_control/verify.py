@@ -229,7 +229,7 @@ def verify_text_in_window(hwnd: int, target: str) -> bool:
 
 
 def verify_window_changed(
-    hwnd: int, threshold: float = 0.05, region: Optional[tuple] = None,
+    hwnd: int, threshold: Optional[float] = None, region: Optional[tuple] = None,
 ) -> bool:
     """通道②:断言窗口视觉状态发生变化(像素 diff)。
 
@@ -246,14 +246,19 @@ def verify_window_changed(
 
     Args:
         hwnd: 目标窗口。
-        threshold: 差异比例阈值(0-1,默认 0.05 = 5% 像素不同)。
+        threshold: 差异比例阈值(0-1,默认取配置
+            verify.window_change_threshold=0.05)。
         region: 可选对比区域 (x, y, w, h),默认整窗。
 
     Returns:
         True = 像素差异超阈值(界面确实变了)。
     """
+    from .config import get as cfg_get
+
     if not hwnd or not win32gui.IsWindow(hwnd):
         return False
+    if threshold is None:
+        threshold = cfg_get("verify", "window_change_threshold", 0.05)
     try:
         import tempfile
 

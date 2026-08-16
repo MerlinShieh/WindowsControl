@@ -1,0 +1,3 @@
+# MCP 服务依赖(mcp_server/)— 在 requirements-core 基础上
+-r requirements-core.txt
+fastmcp>=3.4

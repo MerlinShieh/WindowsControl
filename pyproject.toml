@@ -23,10 +23,13 @@ dependencies = [
     "onnxruntime-directml>=1.24; platform_system == 'Windows'",
     "rapidocr-onnxruntime>=1.4",
     "uiautomation>=2.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
 mcp = ["fastmcp>=3.4"]
+assistant = ["openai>=1.0", "python-dotenv>=1.0", "requests>=2.31",
+             "pystray>=0.19"]
 ocr = ["rapidocr-onnxruntime>=1.4"]
 dev = ["pytest>=8"]
 

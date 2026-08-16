@@ -527,7 +527,7 @@ def wait_window_visible(hwnd: int, timeout: float = 30.0,
     return False
 
 
-def notify_system(title: str, message: str, timeout_s: float = 8.0) -> bool:
+def notify_system(title: str, message: str, timeout_s: Optional[float] = None) -> bool:
     """系统托盘气泡通知(Shell_NotifyIconW,零依赖)。
 
     用于提示用户手动操作(如"点击任务栏图标恢复窗口")。
@@ -535,12 +535,16 @@ def notify_system(title: str, message: str, timeout_s: float = 8.0) -> bool:
     Args:
         title: 通知标题。
         message: 通知内容。
-        timeout_s: 气泡显示秒数。
+        timeout_s: 气泡显示秒数(默认取配置 tray.notify_timeout=8.0)。
 
     Returns:
         True = 通知已显示;False = 失败。
     """
+    from .config import get as cfg_get
+
     global _notify_hwnd
+    if timeout_s is None:
+        timeout_s = cfg_get("tray", "notify_timeout", 8.0)
     try:
         shell32 = _get_shell32()
 

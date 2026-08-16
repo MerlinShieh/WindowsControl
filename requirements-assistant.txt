@@ -1,0 +1,6 @@
+# 产品层依赖(assistant/)— LLM 在这里,基于内核 + MCP
+-r requirements-mcp.txt
+openai>=1.0
+python-dotenv>=1.0
+requests>=2.31
+pystray>=0.19

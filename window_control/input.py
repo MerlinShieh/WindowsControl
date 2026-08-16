@@ -230,7 +230,7 @@ def post_hold(
 
 
 def post_drag(
-    hwnd: int, start: tuple, end: tuple, steps: int = 8,
+    hwnd: int, start: tuple, end: tuple, steps: Optional[int] = None,
     button: str = "left", restore_focus: bool = True,
 ) -> bool:
     """后台拖拽:从 start 按下 → 逐步移动到 end → 松开。
@@ -240,11 +240,15 @@ def post_drag(
     Args:
         hwnd: 目标窗口。
         start, end: (x, y) 客户区坐标。
-        steps: 中间插值步数(越大越平滑,默认 8)。
+        steps: 中间插值步数(越大越平滑,默认取配置 input.post_drag_steps)。
         button: 左键拖拽(默认)/右键(选择移动)。
     """
+    from .config import get as cfg_get
+
     if not hwnd or not win32gui.IsWindow(hwnd):
         return False
+    if steps is None:
+        steps = cfg_get("input", "post_drag_steps", 8)
     if steps < 1:
         steps = 1
     prev = win32gui.GetForegroundWindow() if restore_focus else None

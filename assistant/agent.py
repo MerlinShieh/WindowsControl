@@ -36,10 +36,14 @@ import win32api  # noqa: E402
 import win32con  # noqa: E402
 import win32gui  # noqa: E402
 
-# ─── 主 LLM 配置(与 Hermes 共用 DEEPSEEK_API_KEY) ───
-LLM_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-LLM_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-LLM_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+# ─── 主 LLM 配置(统一 config.yaml,见 window_control/config.py)───
+from window_control.config import get as cfg_get  # noqa: E402
+
+LLM_BASE_URL = cfg_get("llm", "base_url")
+LLM_MODEL = cfg_get("llm", "model")
+LLM_KEY = cfg_get("llm", "api_key")
+LLM_TEMPERATURE = cfg_get("llm", "temperature", 0.2)
+MAX_TURNS = cfg_get("llm", "max_turns", 8)
 
 
 @dataclass
@@ -374,7 +378,9 @@ _SYSTEM_PROMPT = """你是"全局 AI 助手"——一个运行在 Windows 上的
 """
 
 
-def _run_deep(text: str, max_turns: int = 8) -> AgentResult:
+def _run_deep(text: str, max_turns: Optional[int] = None) -> AgentResult:
+    if max_turns is None:
+        max_turns = MAX_TURNS
     """深度路径:function calling 循环。"""
     if not LLM_KEY:
         return AgentResult(False, answer="深度路径未配置 DEEPSEEK_API_KEY",
@@ -392,6 +398,7 @@ def _run_deep(text: str, max_turns: int = 8) -> AgentResult:
             resp = client.chat.completions.create(
                 model=LLM_MODEL, messages=messages, tools=_TOOLS,
                 tool_choice="auto", max_tokens=1500,
+                temperature=LLM_TEMPERATURE,
             )
             msg = resp.choices[0].message
             if not msg.tool_calls:

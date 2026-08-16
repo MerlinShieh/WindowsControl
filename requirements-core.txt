@@ -1,0 +1,8 @@
+# 内核层依赖(window_control/)— 零 LLM,纯 Win32 控制
+pywin32>=306
+Pillow>=10.0
+numpy>=1.26
+onnxruntime-directml>=1.24; platform_system == 'Windows'
+rapidocr-onnxruntime>=1.4
+uiautomation>=2.0
+PyYAML>=6.0

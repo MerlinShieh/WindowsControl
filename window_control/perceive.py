@@ -269,16 +269,20 @@ def _get_icon_session():
         return _icon_session
 
 
-def detect_icons(image_path: str, conf_threshold: float = 0.4) -> List[IconMatch]:
+def detect_icons(image_path: str, conf_threshold: Optional[float] = None) -> List[IconMatch]:
     """YOLO(OmniParser icon_detect)检测截图中的图标。
 
     Args:
         image_path: 截图路径
-        conf_threshold: 置信度阈值(默认 0.4)
+        conf_threshold: 置信度阈值(默认取配置 perceive.icon_conf_threshold=0.4)
 
     Returns:
         List[IconMatch];模型缺失/失败 → 空列表(优雅降级,不影响 OCR 路径)
     """
+    from .config import get as cfg_get
+
+    if conf_threshold is None:
+        conf_threshold = cfg_get("perceive", "icon_conf_threshold", 0.4)
     sess = _get_icon_session()
     if sess is None or not os.path.exists(image_path):
         return []

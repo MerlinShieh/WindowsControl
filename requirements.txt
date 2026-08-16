@@ -1,10 +1,5 @@
-pywin32>=306
-Pillow>=10.0
-openai>=1.0
-python-dotenv>=1.0
-requests>=2.31
-rapidocr-onnxruntime>=1.4
-numpy>=1.26
-onnxruntime>=1.17
-uiautomation>=2.0
-pystray>=0.19
+# 全量依赖(开发用)。按层安装:
+#   pip install -r requirements-core.txt        # 仅内核(推荐给库使用者)
+#   pip install -r requirements-mcp.txt         # 内核 + MCP 服务
+#   pip install -r requirements-assistant.txt   # 内核 + MCP + 产品层(全量)
+-r requirements-assistant.txt

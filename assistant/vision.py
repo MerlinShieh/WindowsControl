@@ -20,10 +20,14 @@ from typing import List, Optional
 
 from window_control import perceive, screen  # noqa: E402  内核层
 
-# ─── 配置(环境变量,与 Hermes 共用 XIAOMI_API_KEY) ───
-VISION_BASE_URL = os.environ.get("XIAOMI_BASE_URL", "https://api.xiaomimimo.com/v1")
-VISION_MODEL = os.environ.get("VISION_MODEL", "mimo-v2.5")
-VISION_KEY = os.environ.get("XIAOMI_API_KEY", "")
+# ─── 视觉配置(统一 config.yaml,见 window_control/config.py)───
+from window_control.config import get as cfg_get  # noqa: E402
+
+VISION_BASE_URL = cfg_get("vision", "base_url")
+VISION_MODEL = cfg_get("vision", "model")
+VISION_KEY = cfg_get("vision", "api_key")
+VISION_TEMPERATURE = cfg_get("vision", "temperature", 0.2)
+VISION_MAX_TOKENS = cfg_get("vision", "max_tokens", 1024)
 
 # 语义区域描述:视觉模型输出的目标区域(百分比 0-100)
 _REGION_PROMPT = """你是桌面界面理解助手。给你一张屏幕截图,请理解界面布局并回答用户问题。
@@ -76,6 +80,8 @@ def _call_vision(image_path: str, question: str) -> dict:
     client = OpenAI(base_url=VISION_BASE_URL, api_key=VISION_KEY)
     resp = client.chat.completions.create(
         model=VISION_MODEL,
+        temperature=VISION_TEMPERATURE,
+        max_tokens=VISION_MAX_TOKENS,
         messages=[{
             "role": "user",
             "content": [
@@ -84,7 +90,6 @@ def _call_vision(image_path: str, question: str) -> dict:
                 {"type": "text", "text": _REGION_PROMPT + "\n\n问题:" + question},
             ],
         }],
-        max_tokens=800,
     )
     content = resp.choices[0].message.content or "{}"
     return _parse_json(content)
