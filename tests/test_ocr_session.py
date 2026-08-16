@@ -26,7 +26,12 @@ class TestOcrSession(unittest.TestCase):
         mock.patch.stopall()
 
     def test_not_loaded_by_default(self):
-        """默认懒加载:未调用前不加载(CLI 零额外开销)。"""
+        """默认懒加载:未调用前不加载(CLI 零额外开销)。
+
+        注意:MCP 服务器导入时会 preload_ocr(长驻预热),
+        若已导入 mcp_server 则引擎已加载 → 先 release 验证。
+        """
+        perceive.release_ocr()
         self.assertFalse(perceive.ocr_loaded())
 
     def test_preload_loads_engine(self):
