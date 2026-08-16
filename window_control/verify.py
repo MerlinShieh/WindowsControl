@@ -18,6 +18,8 @@ import tempfile
 import time
 from typing import Callable, Optional
 
+import win32gui  # noqa: E402   (IsWindow 校验)
+
 from . import perceive, screen
 
 # 实测:静止 0.0000 vs 滚动 0.1416,阈值取中间偏保守
@@ -191,3 +193,106 @@ def make_text_present_checker(target: str) -> Callable:
     def _check(hwnd) -> bool:
         return text_appeared(target)
     return _check
+
+
+# ─── 三通道断言(分支 feat/verify-three-channel)───
+# 设计原则:执行者 = 内核本地确定性逻辑;LLM 只声明预期,不参与判断。
+#   通道① 文字断言(窗口级):PrintWindow 抓后台窗口 + OCR 匹配,
+#        后台/被遮挡窗口也能验证(区别于全屏截图方案)
+#   通道② 视觉变化断言:region_diff 像素对比,
+#        开关位置/图标切换等"无文字"变化可断言
+#   通道③ 组合:verify_window_changed = 操作前后窗口截图差异
+
+
+def verify_text_in_window(hwnd: int, target: str) -> bool:
+    """通道①:断言目标窗口内出现指定文字(后台窗口可验证)。
+
+    PrintWindow 抓目标窗口自身渲染(不依赖屏幕可见性),
+    OCR 匹配文字 — 窗口被遮挡/在后台也能断言。
+
+    Args:
+        hwnd: 目标窗口。
+        target: 期望出现的文字(模糊包含匹配)。
+
+    Returns:
+        True = 窗口内找到目标文字;False = 未找到/窗口无效/OCR 失败。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    try:
+        # ocr_window 返回 (matches, offset) — matches 是 TextMatch 列表
+        result = perceive.ocr_window(hwnd)
+        matches = result[0] if isinstance(result, tuple) else result
+        return any(target in (m.text or "") for m in matches)
+    except Exception:
+        return False
+
+
+def verify_window_changed(
+    hwnd: int, threshold: float = 0.05, region: Optional[tuple] = None,
+) -> bool:
+    """通道②:断言窗口视觉状态发生变化(像素 diff)。
+
+    用于开关位置移动、图标切换、颜色变化等"无文字"变化;
+    操作前后各抓一次窗口截图,region_diff 对比。
+
+    注意:
+      - 窗口截图用 capture_window_by_rect(全屏裁剪,实时帧)。
+        PrintWindow 对 Qt 自绘窗口返回缓存帧,无法检测变化(实测)。
+      - region_diff 返回差异比例(0-1),阈值默认 5% 像素变化。
+
+    Args:
+        hwnd: 目标窗口。
+        threshold: 差异比例阈值(0-1,默认 0.05 = 5% 像素不同)。
+        region: 可选对比区域 (x, y, w, h),默认整窗。
+
+    Returns:
+        True = 像素差异超阈值(界面确实变了)。
+    """
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return False
+    try:
+        import tempfile
+
+        f1 = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        f2 = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        f1.close()
+        f2.close()
+        try:
+            # 全屏裁剪(实时帧,PrintWindow 对自绘窗口有缓存问题)
+            from .screen import capture_window_by_rect
+
+            capture_window_by_rect(hwnd, f1.name)
+            capture_window_by_rect(hwnd, f2.name)
+            diff = region_diff(f1.name, f2.name, region=region)
+            return diff >= threshold
+        finally:
+            for f in (f1.name, f2.name):
+                try:
+                    os.unlink(f)
+                except OSError:
+                    pass
+    except Exception:
+        return False
+
+
+def wait_text_in_window(
+    hwnd: int, target: str, timeout: float = 5.0, interval: float = 0.3,
+) -> bool:
+    """通道①+轮询:等待窗口内出现目标文字(异步操作验证)。
+
+    Args:
+        hwnd: 目标窗口。
+        target: 期望出现的文字。
+        timeout: 最长等待秒。
+        interval: 轮询间隔秒。
+
+    Returns:
+        True = 超时前文字出现;False = 超时。
+    """
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < timeout:
+        if verify_text_in_window(hwnd, target):
+            return True
+        time.sleep(interval)
+    return False
