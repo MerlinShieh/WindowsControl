@@ -424,6 +424,47 @@ def _get_engine():
         return _engine
 
 
+# ─── OCR 会话管理(懒加载/预热/释放)───
+# 设计(2026-08-16):引擎生命周期由调用方掌控 —
+#   preload:长驻进程启动时预热(消除首次 1.5s 加载延迟)
+#   release:空闲时显式释放(归还内存,下次懒加载)
+#   ocr_loaded:查询状态
+# 默认懒加载(不预热):CLI 一次性调用零额外开销。
+
+def preload_ocr() -> bool:
+    """预热 OCR 引擎(立即加载,消除首次调用延迟)。
+
+    适合长驻进程(agent/托盘/MCP 服务)启动时调用;
+    CLI 一次性调用无需预热(懒加载已足够)。
+    """
+    global _engine
+    try:
+        with _engine_lock:
+            if _engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+
+                _engine = RapidOCR(config_path=_ensure_config_file())
+        return _engine is not None
+    except Exception:
+        return False
+
+
+def release_ocr() -> bool:
+    """释放 OCR 引擎(归还内存)。
+
+    长驻进程空闲时调用;下次 OCR 调用自动懒加载。
+    """
+    global _engine
+    with _engine_lock:
+        _engine = None
+    return True
+
+
+def ocr_loaded() -> bool:
+    """查询 OCR 引擎是否已加载。"""
+    return _engine is not None
+
+
 def load_image(image_path: str) -> object:
     """加载图片为 numpy 数组(供 OCR 使用)。"""
     from PIL import Image

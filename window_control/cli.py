@@ -35,14 +35,23 @@ def _win_to_dict(w):
     return w.to_dict() if w else None
 
 
-def main(argv=None) -> int:
-    if argv is None:
-        argv = sys.argv[1:]
-    argv = list(argv)
-    # 允许 --json 出现在任意位置(子命令前后均可)
-    as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+def _click_row_cli(hwnd: int, text: str, button: str = "left") -> bool:
+    """按文字定位行并后台点击(CLI click-row/click-window 共用)。"""
+    from . import input as wc_input
 
+    try:
+        matches = perceive.ocr_window(hwnd)
+        ms = matches[0] if isinstance(matches, tuple) else matches
+        row = next((m for m in ms if text[:2] in (m.text or "")), None)
+        if not row:
+            return False
+        return wc_input.post_click(hwnd, *row.center, button=button)
+    except Exception:
+        return False
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """构建 CLI 参数解析器(独立函数,便于测试)。"""
     p = argparse.ArgumentParser(prog="window_control", description="窗口控制内核")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -83,6 +92,66 @@ def main(argv=None) -> int:
     p_click.add_argument("--y", type=int, required=True)
     p_click.add_argument("--button", choices=["left", "right", "middle"], default="left")
 
+    # ─── 行级/窗口级点击(OCR 定位文字行)───
+    p_click_row = sub.add_parser("click-row", help="按文字定位行并后台点击(行级)")
+    p_click_row.add_argument("--hwnd", type=int, required=True)
+    p_click_row.add_argument("--text", type=str, required=True, help="行内文字(模糊)")
+    p_click_row.add_argument("--button", choices=["left", "right", "middle"],
+                             default="left")
+
+    p_click_win = sub.add_parser("click-window", help="按窗口标题+文字定位并点击(窗口级)")
+    p_click_win.add_argument("--title", type=str, required=True, help="窗口标题(模糊)")
+    p_click_win.add_argument("--text", type=str, required=True, help="窗口内文字(模糊)")
+    p_click_win.add_argument("--button", choices=["left", "right", "middle"],
+                             default="left")
+
+    # ─── 后台鼠标扩展 ───
+    p_drag = sub.add_parser("drag", help="后台拖拽(客户区坐标)")
+    p_drag.add_argument("--hwnd", type=int, required=True)
+    p_drag.add_argument("--x1", type=int, required=True)
+    p_drag.add_argument("--y1", type=int, required=True)
+    p_drag.add_argument("--x2", type=int, required=True)
+    p_drag.add_argument("--y2", type=int, required=True)
+    p_drag.add_argument("--steps", type=int, default=8)
+
+    p_hold = sub.add_parser("hold", help="后台长按")
+    p_hold.add_argument("--hwnd", type=int, required=True)
+    p_hold.add_argument("--x", type=int, required=True)
+    p_hold.add_argument("--y", type=int, required=True)
+    p_hold.add_argument("--duration", type=float, default=1.0)
+
+    p_dbl = sub.add_parser("double-click", help="后台双击")
+    p_dbl.add_argument("--hwnd", type=int, required=True)
+    p_dbl.add_argument("--x", type=int, required=True)
+    p_dbl.add_argument("--y", type=int, required=True)
+
+    p_scroll = sub.add_parser("scroll", help="后台滚动(WM_MOUSEWHEEL)")
+    p_scroll.add_argument("--hwnd", type=int, required=True)
+    p_scroll.add_argument("--x", type=int, default=200)
+    p_scroll.add_argument("--y", type=int, default=200)
+    p_scroll.add_argument("--delta", type=int, default=120, help=">0 上滚,<0 下滚")
+
+    p_hover = sub.add_parser("hover", help="后台移动鼠标(hover)")
+    p_hover.add_argument("--hwnd", type=int, required=True)
+    p_hover.add_argument("--x", type=int, required=True)
+    p_hover.add_argument("--y", type=int, required=True)
+
+    # ─── 三通道断言 ───
+    p_vw = sub.add_parser("verify-window", help="断言窗口内文字出现(通道①)")
+    p_vw.add_argument("--hwnd", type=int, required=True)
+    p_vw.add_argument("--text", type=str, required=True)
+    p_vw.add_argument("--wait", type=float, default=0.0,
+                      help=">0 时用通道③轮询等待(秒)")
+
+    p_wc = sub.add_parser("window-change", help="断言窗口视觉变化(通道②)")
+    p_wc.add_argument("--hwnd", type=int, required=True)
+    p_wc.add_argument("--threshold", type=float, default=0.05)
+
+    # ─── OCR 会话管理(预留扩展接口)───
+    p_sess = sub.add_parser("session", help="OCR 会话管理(懒加载/预热/释放)")
+    p_sess.add_argument("--action", choices=["preload", "release", "status"],
+                        default="status")
+
     p_locate = sub.add_parser("locate", help="OCR 定位屏幕文字(返回精确像素坐标)")
     p_locate.add_argument("--text", type=str, required=True)
     p_locate.add_argument("--exact", action="store_true", help="完全匹配(默认模糊包含)")
@@ -112,7 +181,20 @@ def main(argv=None) -> int:
     p_run = sub.add_parser("run", help="快速路径:解析中文指令并执行")
     p_run.add_argument("--text", type=str, required=True, help="自然语言指令,如:最小化微信")
 
+    return p
+
+
+def main(argv=None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    argv = list(argv)
+    # 允许 --json 出现在任意位置(子命令前后均可)
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+
+    p = build_parser()
     args = p.parse_args(argv)
+
 
     if args.cmd == "list":
         wins = api.enum_windows()
@@ -188,6 +270,76 @@ def main(argv=None) -> int:
         ok = input.post_click(args.hwnd, args.x, args.y, args.button)
         _print({"ok": ok}, as_json)
         return 0 if ok else 1
+
+    # ─── 行级/窗口级点击(OCR 定位文字行)───
+    if args.cmd == "click-row":
+        ok = _click_row_cli(args.hwnd, args.text, args.button)
+        _print({"ok": ok, "hwnd": args.hwnd, "text": args.text}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "click-window":
+        wins = api.find_windows(title_contains=args.title)
+        if not wins:
+            _print({"ok": False, "error": f"未找到窗口 {args.title}"}, as_json)
+            return 1
+        ok = _click_row_cli(wins[0].hwnd, args.text, args.button)
+        _print({"ok": ok, "hwnd": wins[0].hwnd, "text": args.text}, as_json)
+        return 0 if ok else 1
+
+    # ─── 后台鼠标扩展 ───
+    if args.cmd == "drag":
+        ok = input.post_drag(args.hwnd, (args.x1, args.y1), (args.x2, args.y2),
+                             steps=args.steps)
+        _print({"ok": ok}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "hold":
+        ok = input.post_hold(args.hwnd, args.x, args.y, duration=args.duration)
+        _print({"ok": ok}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "double-click":
+        ok = input.post_double_click(args.hwnd, args.x, args.y)
+        _print({"ok": ok}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "scroll":
+        ok = input.post_scroll(args.hwnd, args.x, args.y, delta=args.delta)
+        _print({"ok": ok}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "hover":
+        ok = input.post_move(args.hwnd, args.x, args.y)
+        _print({"ok": ok}, as_json)
+        return 0 if ok else 1
+
+    # ─── 三通道断言 ───
+    if args.cmd == "verify-window":
+        if args.wait > 0:
+            ok = verify.wait_text_in_window(args.hwnd, args.text,
+                                            timeout=args.wait)
+        else:
+            ok = verify.verify_text_in_window(args.hwnd, args.text)
+        _print({"ok": ok, "hwnd": args.hwnd, "text": args.text}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "window-change":
+        ok = verify.verify_window_changed(args.hwnd, threshold=args.threshold)
+        _print({"ok": ok, "hwnd": args.hwnd}, as_json)
+        return 0 if ok else 1
+
+    # ─── OCR 会话管理(预留扩展接口)───
+    if args.cmd == "session":
+        if args.action == "preload":
+            perceive.preload_ocr()
+            _print({"ok": True, "action": "preload"}, as_json)
+        elif args.action == "release":
+            perceive.release_ocr()
+            _print({"ok": True, "action": "release"}, as_json)
+        else:
+            _print({"ok": True, "action": "status",
+                    "loaded": perceive.ocr_loaded()}, as_json)
+        return 0
 
     if args.cmd == "locate":
         if args.image:
