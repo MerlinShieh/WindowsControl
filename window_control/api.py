@@ -449,3 +449,148 @@ def _restore_fg(prev: int) -> bool:
     except Exception:
         pass
     return False
+
+
+# ─── 托盘隐藏态检测 / 提示 / 等待恢复 ───
+# 产品设计(2026-08-16):托盘隐藏态 = 进程存活但窗口不可见(visible=0),
+# 程序无法自动恢复(实测硬边界),需用户手动点击任务栏图标。
+# 内核提供:检测 + 系统通知提示 + 轮询等待;CLI/MCP 共用结构化返回。
+
+import ctypes  # noqa: E402
+import time as _time  # noqa: E402
+
+_NOTIFY_CLASS = "HermesNotifyWnd"
+_notify_hwnd = 0
+
+# shell32 句柄(运行时绑定,测试可替换)
+_shell32 = None
+
+
+def _get_shell32():
+    global _shell32
+    if _shell32 is None:
+        _shell32 = ctypes.windll.shell32
+    return _shell32
+
+
+def detect_tray_hidden(title_contains: str = "") -> Optional[dict]:
+    """检测应用是否处于托盘隐藏态(进程在但窗口不可见)。
+
+    Args:
+        title_contains: 窗口标题子串(如"微信")。
+
+    Returns:
+        {"tray_hidden": True, "proc": 进程名, "hwnd": 原窗口 hwnd(若找到),
+         "message": 提示文案} — 检测到托盘态;
+        None — 非托盘态(可见/不存在)。
+    """
+    for w in enum_windows(visible_only=False, min_size=0):
+        if title_contains and title_contains not in w.title:
+            continue
+        if not w.visible and w.process_name.lower() != "explorer.exe":
+            # 进程存在但主窗口不可见 → 托盘隐藏态
+            return {
+                "tray_hidden": True,
+                "proc": w.process_name,
+                "hwnd": w.hwnd,
+                "message": f"{title_contains or w.process_name}已隐藏到托盘,"
+                           f"请点击任务栏图标恢复窗口",
+            }
+    return None
+
+
+def wait_window_visible(hwnd: int, timeout: float = 30.0,
+                        interval: float = 1.0) -> bool:
+    """轮询等待窗口变为可见(用户手动恢复托盘窗口后)。
+
+    Args:
+        hwnd: 目标窗口(托盘态时可能为 0,则按进程找)。
+        timeout: 最长等待秒。
+        interval: 轮询间隔秒。
+
+    Returns:
+        True = 窗口已可见(用户已恢复);False = 超时。
+    """
+    if hwnd and not win32gui.IsWindow(hwnd):
+        return False
+    t0 = _time.monotonic()
+    while _time.monotonic() - t0 < timeout:
+        if hwnd:
+            if win32gui.IsWindowVisible(hwnd):
+                return True
+        else:
+            # 按可见窗口重新搜索
+            for w in enum_windows(visible_only=True):
+                if w.title and not w.is_desktop_shell:
+                    return True
+        _time.sleep(interval)
+    return False
+
+
+def notify_system(title: str, message: str, timeout_s: float = 8.0) -> bool:
+    """系统托盘气泡通知(Shell_NotifyIconW,零依赖)。
+
+    用于提示用户手动操作(如"点击任务栏图标恢复窗口")。
+
+    Args:
+        title: 通知标题。
+        message: 通知内容。
+        timeout_s: 气泡显示秒数。
+
+    Returns:
+        True = 通知已显示;False = 失败。
+    """
+    global _notify_hwnd
+    try:
+        shell32 = _get_shell32()
+
+        class NOTIFYICONDATAW(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", ctypes.c_ulong),
+                ("hWnd", ctypes.c_void_p),
+                ("uID", ctypes.c_uint),
+                ("uFlags", ctypes.c_uint),
+                ("uCallbackMessage", ctypes.c_uint),
+                ("hIcon", ctypes.c_void_p),
+                ("szTip", ctypes.c_wchar * 128),
+                ("dwState", ctypes.c_ulong),
+                ("dwStateMask", ctypes.c_ulong),
+                ("szInfo", ctypes.c_wchar * 256),
+                ("uVersion", ctypes.c_uint),
+                ("szInfoTitle", ctypes.c_wchar * 64),
+                ("dwInfoFlags", ctypes.c_ulong),
+                ("guidItem", ctypes.c_byte * 16),
+                ("hBalloonIcon", ctypes.c_void_p),
+            ]
+
+        # 创建隐藏消息窗口(通知回调载体)
+        if not _notify_hwnd:
+            wc = win32gui.WNDCLASS()
+            wc.lpfnWndProc = win32gui.DefWindowProc
+            wc.lpszClassName = _NOTIFY_CLASS
+            try:
+                win32gui.RegisterClass(wc)
+            except Exception:
+                pass
+            _notify_hwnd = win32gui.CreateWindow(
+                _NOTIFY_CLASS, "HermesNotify", 0,
+                0, 0, 0, 0, 0, 0, None, None)
+
+        nid = NOTIFYICONDATAW()
+        nid.cbSize = ctypes.sizeof(NOTIFYICONDATAW)
+        nid.hWnd = _notify_hwnd
+        nid.uID = 1
+        nid.uFlags = 0x10 | 0x4 | 0x1  # NIF_INFO | NIF_TIP | NIF_MESSAGE
+        nid.uCallbackMessage = 0x8000 + 20  # WM_USER + 20
+        nid.szInfo = message[:255]
+        nid.szInfoTitle = title[:63]
+        nid.dwInfoFlags = 0x1  # NIIF_INFO
+
+        ok = bool(shell32.Shell_NotifyIconW(0, ctypes.byref(nid)))  # NIM_ADD
+        if ok:
+            shell32.Shell_NotifyIconW(1, ctypes.byref(nid))  # NIM_MODIFY 刷新
+            _time.sleep(timeout_s)
+            shell32.Shell_NotifyIconW(2, ctypes.byref(nid))  # NIM_DELETE
+        return ok
+    except Exception:
+        return False

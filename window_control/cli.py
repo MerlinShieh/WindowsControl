@@ -152,6 +152,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_sess.add_argument("--action", choices=["preload", "release", "status"],
                         default="status")
 
+    # ─── 托盘隐藏态(检测/提示/等待恢复)───
+    p_tray = sub.add_parser("tray-check", help="检测应用是否处于托盘隐藏态")
+    p_tray.add_argument("--title", type=str, required=True, help="窗口标题子串(如:微信)")
+
+    p_notify = sub.add_parser("notify", help="系统托盘气泡通知")
+    p_notify.add_argument("--title", type=str, required=True)
+    p_notify.add_argument("--message", type=str, required=True)
+    p_notify.add_argument("--timeout", type=float, default=8.0)
+
+    p_waitw = sub.add_parser("wait-window", help="等待窗口变为可见(用户手动恢复后)")
+    p_waitw.add_argument("--hwnd", type=int, default=0)
+    p_waitw.add_argument("--timeout", type=float, default=30.0)
+
     p_locate = sub.add_parser("locate", help="OCR 定位屏幕文字(返回精确像素坐标)")
     p_locate.add_argument("--text", type=str, required=True)
     p_locate.add_argument("--exact", action="store_true", help="完全匹配(默认模糊包含)")
@@ -340,6 +353,27 @@ def main(argv=None) -> int:
             _print({"ok": True, "action": "status",
                     "loaded": perceive.ocr_loaded()}, as_json)
         return 0
+
+    # ─── 托盘隐藏态(检测/提示/等待恢复)───
+    if args.cmd == "tray-check":
+        r = api.detect_tray_hidden(args.title)
+        if r is None:
+            _print({"ok": True, "tray_hidden": False,
+                    "title": args.title}, as_json)
+        else:
+            _print({"ok": True, **r}, as_json)
+        return 0
+
+    if args.cmd == "notify":
+        ok = api.notify_system(args.title, args.message,
+                               timeout_s=args.timeout)
+        _print({"ok": ok, "title": args.title}, as_json)
+        return 0 if ok else 1
+
+    if args.cmd == "wait-window":
+        ok = api.wait_window_visible(args.hwnd, timeout=args.timeout)
+        _print({"ok": ok, "hwnd": args.hwnd, "timeout": args.timeout}, as_json)
+        return 0 if ok else 1
 
     if args.cmd == "locate":
         if args.image:
