@@ -19,8 +19,11 @@ from ctypes import wintypes
 from typing import Optional, Union
 
 import win32con
+import win32api
 import win32gui
 import win32process  # noqa: E402
+
+from . import api  # noqa: E402  窗口枚举(safe_hotkey 覆盖层检测)
 
 # ─── 后台输入:PostMessage ───
 
@@ -614,6 +617,119 @@ def hotkey(*vks: int) -> None:
     for vk in reversed(vks):
         key_up(vk)
         time.sleep(0.02)
+
+
+# ─── 组合键安全触发(safe_hotkey)───
+# 设计(2026-08-16 风险探索):前台组合键可能触发系统级副作用 —
+#   A 级(不可恢复):锁屏/安全桌面/投影切换 → 直接拒绝
+#   B 级(覆盖层):截图/开始菜单/任务视图 → 检测后 Esc 关闭
+#   C 级(导航切换):Alt+Tab/Win+D → 恢复原前台
+
+# A 级黑名单:组合键集合 → 说明(不可恢复操作,默认拒绝)
+VK_LWIN = 0x5B
+VK_CONTROL = 0x11
+VK_MENU = 0x12  # Alt
+VK_DELETE = 0x2E
+VK_L = 0x4C
+VK_P = 0x50
+VK_ESCAPE = 0x1B
+
+# 黑名单判定:组合键含 Win+L / Ctrl+Alt+Del / Win+P 等
+_FORBIDDEN_COMBOS = (
+    (VK_LWIN, VK_L),                # Win+L 锁屏
+    (VK_LWIN, VK_P),                # Win+P 投影切换
+)
+_FORBIDDEN_CTRL_ALT_DEL = {VK_CONTROL, VK_MENU, VK_DELETE}
+
+
+def _is_forbidden(vks: tuple) -> bool:
+    """判断组合键是否命中 A 级黑名单。"""
+    if any(set(vks) == set(c) for c in _FORBIDDEN_COMBOS):
+        return True
+    if _FORBIDDEN_CTRL_ALT_DEL <= set(vks):
+        return True
+    return False
+
+
+def _find_overlay_window(before: list, after: list, screen_size: tuple) -> int:
+    """检测覆盖层窗口:触发后新出现的全屏窗口。
+
+    Args:
+        before, after: 触发前后 api.enum_windows() 快照。
+        screen_size: (w, h) 主屏尺寸。
+
+    Returns:
+        覆盖层 hwnd;无则 0。
+    """
+    before_ids = {w.hwnd for w in before}
+    sw, sh = screen_size
+    for w in after:
+        if w.hwnd in before_ids:
+            continue
+        try:
+            l, t, r, b = win32gui.GetWindowRect(w.hwnd)
+        except Exception:
+            continue
+        ww, wh = r - l, b - t
+        # 全屏或接近全屏(> 90% 屏幕)
+        if ww >= sw * 0.9 and wh >= sh * 0.9:
+            return w.hwnd
+    return 0
+
+
+def safe_hotkey(
+    *vks: int,
+    forbid_unrecoverable: bool = True,
+    detect_overlay: bool = True,
+    restore_focus: bool = True,
+) -> bool:
+    """组合键安全触发(三层防护)。
+
+    Args:
+        vks: 虚拟键序列,如 safe_hotkey(VK_CONTROL, ord('S'))。
+        forbid_unrecoverable: 拒绝 A 级不可恢复组合键(默认 True)。
+        detect_overlay: 检测 B 级覆盖层并 Esc 关闭(默认 True)。
+        restore_focus: 触发后恢复原前台(默认 True)。
+
+    Returns:
+        True = 已触发;False = 被黑名单拒绝。
+
+    注:仅防"系统级"副作用;应用内副作用(如 Ctrl+W 关标签)
+    由调用方判断,不在本层拦截。
+    """
+    vks = tuple(vks)
+    if forbid_unrecoverable and _is_forbidden(vks):
+        return False
+
+    # 快照(覆盖层检测 + 前台恢复)
+    before_wins = api.enum_windows(visible_only=True) if detect_overlay else []
+    prev_fg = win32gui.GetForegroundWindow() if restore_focus else None
+
+    hotkey(*vks)
+    time.sleep(0.35)  # 等系统处理组合键
+
+    # B 级:覆盖层检测 → Esc 关闭
+    if detect_overlay:
+        try:
+            sw = win32api.GetSystemMetrics(0)
+            sh = win32api.GetSystemMetrics(1)
+        except Exception:
+            sw, sh = 2560, 1440
+        after_wins = api.enum_windows(visible_only=True)
+        overlay = _find_overlay_window(before_wins, after_wins, (sw, sh))
+        if overlay:
+            tap(VK_ESCAPE)
+            time.sleep(0.2)
+            tap(VK_ESCAPE)  # 双保险
+
+    # C 级:恢复原前台
+    if restore_focus and prev_fg:
+        try:
+            if win32gui.GetForegroundWindow() != prev_fg:
+                restore_foreground()
+        except Exception:
+            pass
+    return True
 
 
 # ─── 行级点击:bbox → 中心 → 后台 → verify → 升级 ───
