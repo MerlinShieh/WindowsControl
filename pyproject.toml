@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "windows-control-core"
+version = "1.0.0"
+description = "纯 Windows 窗口控制内核:后台键鼠控制、OCR 感知、三通道断言、组合键安全"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Merlin Shieh" }]
+keywords = ["windows", "automation", "control", "agent", "win32"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "pywin32>=306",
+    "Pillow>=10.0",
+    "numpy>=1.26",
+    "onnxruntime-directml>=1.24; platform_system == 'Windows'",
+    "rapidocr-onnxruntime>=1.4",
+    "uiautomation>=2.0",
+]
+
+[project.optional-dependencies]
+mcp = ["fastmcp>=3.4"]
+ocr = ["rapidocr-onnxruntime>=1.4"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+window-control = "window_control.cli:main"
+
+[tool.setuptools]
+packages = ["window_control"]
+
+[tool.setuptools.package-data]
+window_control = ["*.yaml"]

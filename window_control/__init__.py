@@ -15,7 +15,7 @@ from .api import (
 )
 from . import actions, screen, input, perceive, games, verify, uia, commands
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 __all__ = [
     "WindowInfo",
     "enum_windows",
