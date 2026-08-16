@@ -1,21 +1,46 @@
-MIT License
+Window Control Core 非商用许可协议(Non-Commercial License)
 
 Copyright (c) 2026 Window Control Core contributors
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+本软件及其关联文档(以下统称"本软件")受本许可协议约束。
+使用、复制或分发本软件,即表示您同意本协议条款。
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+一、授予的权利
+在遵守本协议的前提下,授予您以下非独占、不可再许可、不可转让的权利:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. 个人使用:您可以自由使用、复制、修改本软件,用于个人学习、
+   研究、实验、开发测试等非商业目的。
+2. 教育使用:教育机构和教育工作者可以在教学、科研中使用本软件。
+3. 分发:您可以分发本软件及其修改版本,但必须:
+   (a) 保留本许可协议的完整副本;
+   (b) 注明原始版权声明和作者署名;
+   (c) 任何修改版本必须以相同的许可条款分发;
+   (d) 不得对第三方使用设置超出本协议的限制。
+
+二、商业使用禁止(核心条款)
+禁止将本软件或其任何部分、衍生作品、修改版本用于商业目的,包括但不限于:
+
+1. 销售、出租、许可、转让本软件或其衍生作品以获取直接或间接经济利益;
+2. 将本软件嵌入商业产品、商业服务、商业系统(无论是否收费);
+3. 在公司、组织、机构内部将其用于生产环境、创收业务或客户交付;
+4. 为本软件提供商业化的托管、代运营、技术支持服务并收费;
+5. 以商业目的使用本软件的训练成果、输出数据或衍生数据(如界面自动化模型);
+6. 其他以营利为目的的使用方式。
+
+如需商业使用,必须事先获得版权持有人的书面许可。
+商业授权请联系:merlinshieh@outlook.com
+
+三、免责声明
+本软件按"现状"(AS IS)提供,不附带任何明示或暗示的担保,
+包括但不限于适销性、特定用途适用性及不侵权的担保。
+在任何情况下,作者或版权持有人均不对因使用本软件而产生的
+任何索赔、损害或其他责任负责,无论是合同、侵权或其他方式。
+
+四、协议终止
+如您违反本协议任何条款,本协议授予的权利将自动终止。
+终止后,您必须停止使用并销毁本软件的所有副本。
+终止不影响版权持有人依法享有的其他权利。
+
+五、其他
+本协议受中华人民共和国法律管辖。若本协议任何条款被认定为无效,
+其余条款仍然有效。

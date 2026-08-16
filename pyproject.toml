@@ -8,13 +8,13 @@ version = "1.0.0"
 description = "纯 Windows 窗口控制内核:后台键鼠控制、OCR 感知、三通道断言、组合键安全"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "非商用许可协议(Non-Commercial License)" }
 authors = [{ name = "Merlin Shieh" }]
 keywords = ["windows", "automation", "control", "agent", "win32"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: Microsoft :: Windows",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
 ]
 dependencies = [
     "pywin32>=306",

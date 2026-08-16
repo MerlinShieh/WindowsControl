@@ -145,14 +145,16 @@ perceive.release_ocr()   # 释放
 
 ## 开源与许可
 
-本项目以 **MIT License** 开源(见 LICENSE 文件),代码可自由使用/修改/分发(含商业用途)。
+本项目采用**非商用许可协议**(见 LICENSE 文件):允许个人/学习/研究/教育使用,
+**禁止商业用途**(销售、嵌入商业产品、公司内部生产环境等)。
+商业使用请联系版权持有人获取书面授权。
 
 **第三方模型许可声明**(重要):
 
 - `window_control/perceive.py` 的**图标检测**使用 `onnx-community/OmniParser-v2.0_icon_detect`
   (微软 OmniParser v2 的 icon_detect ONNX 导出,首次运行时自动下载到 `models/icon_detect_v2.onnx`)。
   该模型权重为 **AGPL-3.0 许可**,仅用于本项目的界面元素检测功能;
-  **项目代码本身保持 MIT**,模型权重按 AGPL-3.0 条款使用(使用方须遵循 AGPL 对模型权重的约束)。
+  **项目代码本身采用非商用许可**,模型权重按 AGPL-3.0 条款使用(使用方须遵循 AGPL 对模型权重的约束)。
 - OCR 使用 rapidocr-onnxruntime(Apache-2.0 许可),无额外约束。
 
 **图标检测模型下载地址**(首次运行自动下载,也可手动下载放入 `models/`):
