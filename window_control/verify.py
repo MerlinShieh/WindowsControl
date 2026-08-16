@@ -240,6 +240,9 @@ def verify_window_changed(
       - 窗口截图用 capture_window_by_rect(全屏裁剪,实时帧)。
         PrintWindow 对 Qt 自绘窗口返回缓存帧,无法检测变化(实测)。
       - region_diff 返回差异比例(0-1),阈值默认 5% 像素变化。
+      - 适用条件:窗口未被遮挡(副屏未被其他窗口盖住)。
+        被遮挡时全屏裁剪抓到遮挡物 — 双屏主场景(游戏前台+副屏
+        被遮挡)请用通道①/③ 文字断言(PrintWindow 穿透遮挡,实测可靠)。
 
     Args:
         hwnd: 目标窗口。
