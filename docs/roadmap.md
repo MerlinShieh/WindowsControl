@@ -2,7 +2,7 @@
 
 > 本文档整合:规划 v4(`.hermes/plans/2026-08-08_global-ai-assistant-v4.md`)+ 竞品调研(`docs/competitor-nuphus-mcp.md`)+ 历次实测结论。
 >
-> 生成日期:2026-08-10 | 项目根:`D:\data\opencode_temp_code\window_control_core`
+> 生成日期:2026-08-10 | 项目根:`.`
 
 ---
 

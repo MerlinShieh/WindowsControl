@@ -44,3 +44,7 @@ desktop.ini
 .vscode/
 *.swp
 @AutomationLog.txt
+
+# ── 开发内部规划(不进 Git,含本地策略讨论)──
+.hermes/
+!docs/**/*.png

@@ -39,7 +39,7 @@ window_control_core/
 ## 安装
 
 ```bash
-cd D:\data\opencode_temp_code\window_control_core
+cd .
 ./.venv/Scripts/python.exe -m pip install -r requirements.txt   # 依赖
 ```
 
