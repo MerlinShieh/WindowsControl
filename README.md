@@ -60,6 +60,12 @@ python -m venv .venv
 
 ### 配置到 MCP 客户端(Claude Desktop / Cursor / 任意 MCP 客户端)
 
+MCP 服务器支持 **3 种传输方式**,工具参数格式完全一致(见下方说明):
+
+#### ① Stdio(默认,本地最常用)
+
+MCP 客户端作为子进程启动服务器,通过 stdin/stdout 通信(无需端口,安全性高):
+
 ```json
 {
   "mcpServers": {
@@ -69,6 +75,61 @@ python -m venv .venv
     }
   }
 }
+```
+
+#### ② SSE(Server-Sent Events,HTTP 长连接)
+
+服务器独立运行,客户端通过 HTTP+SSE 连接(适合远程或跨进程共享):
+
+```bash
+# 启动服务器(监听 http://0.0.0.0:8000/sse)
+.venv/Scripts/python.exe -m mcp_server.windows_control_mcp --transport sse
+```
+
+```json
+{
+  "mcpServers": {
+    "windows-control": {
+      "url": "http://localhost:8000/sse"
+    }
+  }
+}
+```
+
+#### ③ Streamable HTTP(MCP 2025 新规范,推荐远程)
+
+```bash
+# 启动服务器(监听 http://0.0.0.0:8000/mcp)
+.venv/Scripts/python.exe -m mcp_server.windows_control_mcp --transport streamable-http
+```
+
+```json
+{
+  "mcpServers": {
+    "windows-control": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
+
+> 传输方式也可通过环境变量指定:`MCP_TRANSPORT=sse` / `MCP_HOST` / `MCP_PORT`。
+
+#### 参数格式兼容性(3 种传输完全一致)
+
+| 维度 | Stdio | SSE | Streamable HTTP |
+|---|---|---|---|
+| 工具列表(28 个) | ✅ 一致 | ✅ 一致 | ✅ 一致 |
+| 工具 JSON Schema | ✅ 相同 | ✅ 相同 | ✅ 相同 |
+| `tools/call` 参数格式 | JSON object | JSON object | JSON object |
+
+**结论**:工具定义由函数签名 + 类型注解自动生成 JSON Schema,**与传输层无关**。
+客户端切换传输方式时,**工具参数格式无需任何改动**,唯一差异是「连接配置」
+(stdio 用 `command`+`args`;HTTP 类用 `url`)。
+
+```json
+// tools/call 请求示例(任意传输通用)
+{"method": "tools/call", "params": {"name": "move_window", "arguments": {"hwnd": 123456, "x": 100, "y": 50}}}
 ```
 
 > MCP 服务**按需启动**:Agent 连接时自动拉起进程,断开关闭。

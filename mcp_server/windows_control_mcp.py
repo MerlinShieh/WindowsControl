@@ -279,8 +279,47 @@ def wait_window_visible(hwnd: int, timeout: float = 30.0) -> bool:
 
 
 def main():
-    """启动 MCP 服务器(stdio 传输)。"""
-    mcp.run()
+    """启动 MCP 服务器。
+
+    传输方式(优先级:命令行 --transport > 环境变量 MCP_TRANSPORT > 默认 stdio):
+      - stdio(默认):MCP 客户端作为子进程启动,通过 stdin/stdout 通信(本地最常用)
+      - sse:HTTP SSE 传输,默认监听 http://0.0.0.0:8000/sse
+      - streamable-http:HTTP Streamable 传输,默认 http://0.0.0.0:8000/mcp
+
+    说明:工具定义与传输方式完全无关 —— fastmcp 从同一套函数签名 + 类型注解
+    生成 JSON Schema,因此在 stdio / sse / streamable-http 三种传输下,
+    客户端看到的 tool 列表(schema)、调用参数格式(JSON object)完全一致,
+    差异仅在「客户端如何连接到服务器」(stdio=command/args;http类=url)。
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Windows Control Core MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default=os.environ.get("MCP_TRANSPORT", "stdio"),
+        help="传输方式(默认 stdio)",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("MCP_HOST", "0.0.0.0"),
+        help="HTTP 类传输监听地址(默认 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("MCP_PORT", "8000")),
+        help="HTTP 类传输监听端口(默认 8000)",
+    )
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        # 子进程模式:客户端通过 stdin/stdout 通信,无需端口
+        mcp.run(transport="stdio")
+    else:
+        # HTTP 类传输:sse / streamable-http
+        # host/port 通过 transport_kwargs 传入 run_http_async
+        mcp.run(transport=args.transport, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
