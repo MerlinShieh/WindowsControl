@@ -17,8 +17,9 @@ env/
 config.json
 ~/.global_assistant/
 
-# ── 模型权重(首次运行自动下载,不进 Git) ──
-models/
+# ── 模型权重(首次运行自动下载,不进 Git;README 说明保留)──
+models/*
+!models/README.md
 
 # ── 临时/截图产物 ──
 *.png

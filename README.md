@@ -159,6 +159,13 @@ perceive.release_ocr()   # 释放
 
 **图标检测模型下载地址**(首次运行自动下载,也可手动下载放入 `models/`):
 
+```bash
+# 自动下载触发(任选其一,自动保存到 models/icon_detect_v2.onnx):
+python -m window_control icons --image shot.png
+# 或 Python:
+#   from window_control import perceive; perceive.detect_icons("shot.png")
+```
+
 ```
 主地址(hf-mirror,国内可达):
 https://hf-mirror.com/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/onnx/model.onnx
@@ -167,6 +174,8 @@ https://hf-mirror.com/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/on
 https://huggingface.co/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/onnx/model.onnx
 ```
 
+- `models/` 目录在仓库中保留(见 `models/README.md` 完整下载说明),
+  模型文件不进入 Git(体积大),用户首次使用自动下载;
 - 下载后保存为 `models/icon_detect_v2.onnx`(约 80MB),代码自动加载;
 - 旧版量化模型 `models/icon_detect.onnx`(约 3.2MB)仍兼容(自动回退);
 - 模型为 **AGPL-3.0 许可**,仅用于界面元素检测(见上方声明)。

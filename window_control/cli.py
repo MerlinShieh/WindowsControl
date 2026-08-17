@@ -170,6 +170,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_locate.add_argument("--exact", action="store_true", help="完全匹配(默认模糊包含)")
     p_locate.add_argument("--image", type=str, default="", help="指定图片路径(默认截取当前屏幕)")
 
+    p_icons = sub.add_parser("icons", help="YOLO 图标检测(首次运行自动下载模型)")
+    p_icons.add_argument("--image", type=str, required=True, help="截图路径")
+
     p_games = sub.add_parser("games", help="检测游戏/反作弊进程(高风险窗口默认禁操作)")
     p_games.add_argument("--windows", action="store_true", help="列出高风险窗口")
 
@@ -374,6 +377,13 @@ def main(argv=None) -> int:
         ok = api.wait_window_visible(args.hwnd, timeout=args.timeout)
         _print({"ok": ok, "hwnd": args.hwnd, "timeout": args.timeout}, as_json)
         return 0 if ok else 1
+
+    if args.cmd == "icons":
+        icons = perceive.detect_icons(args.image)
+        _print([i.to_dict() for i in icons], as_json)
+        if not as_json and not icons:
+            print(f"未检测到图标(或模型缺失,已降级 OCR)")
+        return 0
 
     if args.cmd == "locate":
         if args.image:
