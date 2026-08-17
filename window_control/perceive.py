@@ -219,31 +219,42 @@ _ICON_MODEL_REMOTE_V1 = (
 
 
 def _icon_model_path() -> str:
-    """模型路径;按配置选 v1(仓库自带)或 v2(自动下载),失败优雅降级。
+    """模型路径选择(智能优先:已下载 > 配置指定 > 默认 v1)。
+
+    选择规则:
+      ① 已下载 v2(80MB)→ 优先使用(不浪费,无需任何配置)
+      ② 未下载 v2,但配置 icon_model=v2 → 自动下载
+      ③ 下载失败 / 未配置 / 都失败 → 回退 v1(仓库自带,零成本)
+
+    含义:用户下载了好模型 → 一直用好模型;
+         想回到小模型 → 删 models/icon_detect_v2.onnx 即可。
 
     配置 perceive.icon_model:
-      - "v1"(默认):models/icon_detect.onnx(量化版,3.2MB,仓库自带,开箱即用)
-      - "v2":models/icon_detect_v2.onnx(80MB,首次自动下载,精度更高)
+      - "v1"(默认):仓库自带量化版;若 v2 已下载也会用 v2(智能优先)
+      - "v2":未下载时自动下载;若 v1 已下载也会用 v2(智能优先)
     """
     from .config import get as cfg_get
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    want = cfg_get("perceive", "icon_model", "v1")
-    if want == "v2":
-        # v2 优先;无则自动下载(80MB)
-        path = os.path.join(root, "models", "icon_detect_v2.onnx")
-        if os.path.exists(path):
-            return path
+    v2_path = os.path.join(root, "models", "icon_detect_v2.onnx")
+    v1_path = os.path.join(root, "models", "icon_detect.onnx")
+
+    # ① 已下载 v2 → 优先用(避免 80MB 浪费)
+    if os.path.exists(v2_path):
+        return v2_path
+
+    # ② 未下载 v2,配置要求 v2 → 触发下载
+    if cfg_get("perceive", "icon_model", "v1") == "v2":
         path = _download_icon_model(root, "icon_detect_v2.onnx")
         if path:
             return path
-        # 下载失败 → 回退 v1 量化版(仓库自带,零成本)
-        v1 = os.path.join(root, "models", "icon_detect.onnx")
-        return v1 if os.path.exists(v1) else ""
-    # v1 默认:仓库自带,不存在才尝试下载量化版(旧环境兼容)
-    path = os.path.join(root, "models", "icon_detect.onnx")
-    if os.path.exists(path):
-        return path
+        # 下载失败 → 回退 v1
+
+    # ③ v1(仓库自带优先)
+    if os.path.exists(v1_path):
+        return v1_path
+
+    # v1 也无(旧环境兼容)→ 下载
     return _download_icon_model(root, "icon_detect.onnx")
 
 
