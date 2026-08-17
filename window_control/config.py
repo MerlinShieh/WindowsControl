@@ -39,6 +39,7 @@ DEFAULTS: Dict[str, Any] = {
         "text_min_len": 2,             # OCR 文本最小长度
         "text_max_len": 25,            # OCR 文本最大长度
         "model_dir": "models",         # 模型目录(相对项目根)
+        "icon_model": "v1",            # 图标检测模型:v1(量化版,仓库自带)/ v2(80MB,自动下载)
     },
     # ── 内核:验证 ──
     "verify": {
@@ -92,6 +93,7 @@ _ENV_MAP = {
     "VISION_MODEL": ("vision", "model"),
     "XIAOMI_API_KEY": ("vision", "api_key"),
     "WINDOW_CONTROL_MODEL_DIR": ("perceive", "model_dir"),
+    "WINDOW_CONTROL_ICON_MODEL": ("perceive", "icon_model"),
 }
 
 # ─── 配置管理器 ───

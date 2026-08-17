@@ -157,27 +157,30 @@ perceive.release_ocr()   # 释放
   **项目代码本身采用非商用许可**,模型权重按 AGPL-3.0 条款使用(使用方须遵循 AGPL 对模型权重的约束)。
 - OCR 使用 rapidocr-onnxruntime(Apache-2.0 许可),无额外约束。
 
-**图标检测模型下载地址**(首次运行自动下载,也可手动下载放入 `models/`):
+**图标检测模型**:项目自带 v1 量化版(3.2MB,开箱即用),可选升级 v2 大模型
+(80MB,精度更高,首次自动下载)。详见 `models/README.md`。
 
 ```bash
-# 自动下载触发(任选其一,自动保存到 models/icon_detect_v2.onnx):
+# 开箱即用(默认 v1,仓库自带,零下载):
 python -m window_control icons --image shot.png
-# 或 Python:
-#   from window_control import perceive; perceive.detect_icons("shot.png")
+
+# 升级 v2(配置后首次触发自动下载 80MB):
+#   配置 %LOCALAPPDATA%/window_control/config.yaml:
+#     perceive:
+#       icon_model: v2
+#   或环境变量:set WINDOW_CONTROL_ICON_MODEL=v2
 ```
 
 ```
-主地址(hf-mirror,国内可达):
+v2 模型主地址(hf-mirror,国内可达):
 https://hf-mirror.com/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/onnx/model.onnx
 
 官方源(huggingface.co,主地址不可达时):
 https://huggingface.co/onnx-community/OmniParser-v2.0_icon_detect/resolve/main/onnx/model.onnx
 ```
 
-- `models/` 目录在仓库中保留(见 `models/README.md` 完整下载说明),
-  模型文件不进入 Git(体积大),用户首次使用自动下载;
-- 下载后保存为 `models/icon_detect_v2.onnx`(约 80MB),代码自动加载;
-- 旧版量化模型 `models/icon_detect.onnx`(约 3.2MB)仍兼容(自动回退);
+- `models/` 目录中 v1 量化模型随仓库分发(开箱即用),v2 大模型不进 Git(体积大),自动下载;
+- 旧版量化模型 `models/icon_detect.onnx`(约 3.2MB)为默认;下载失败自动回退;
 - 模型为 **AGPL-3.0 许可**,仅用于界面元素检测(见上方声明)。
 
 > 若你计划闭源/商用且需规避 AGPL 约束,可删除 `models/` 下的模型文件 —

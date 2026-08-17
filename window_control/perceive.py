@@ -207,31 +207,65 @@ def infer_control_type(bbox: tuple, kind: str = "text") -> str:
 # 图标检测模型路径(首次运行下载;v2 全量 80MB,精度显著优于 v1 量化版)
 # 来源:onnx-community/OmniParser-v2.0_icon_detect(微软 OmniParser v2 的 icon_detect
 # 导出,AGPL-3.0 许可 — 本项目开源,许可已在 README 声明)
-_ICON_MODEL_REMOTE = (
+_ICON_MODEL_REMOTE_V2 = (
     "https://hf-mirror.com/onnx-community/OmniParser-v2.0_icon_detect/"
     "resolve/main/onnx/model.onnx"
+)
+# v1 量化版(3.2MB,仓库自带;旧环境无仓库文件时才下载)
+_ICON_MODEL_REMOTE_V1 = (
+    "https://hf-mirror.com/onnx-community/OmniParser-icon_detect/"
+    "resolve/main/onnx/model_quantized.onnx"
 )
 
 
 def _icon_model_path() -> str:
-    """模型路径;不存在时尝试下载(失败返回空串 → 优雅降级)。"""
+    """模型路径;按配置选 v1(仓库自带)或 v2(自动下载),失败优雅降级。
+
+    配置 perceive.icon_model:
+      - "v1"(默认):models/icon_detect.onnx(量化版,3.2MB,仓库自带,开箱即用)
+      - "v2":models/icon_detect_v2.onnx(80MB,首次自动下载,精度更高)
+    """
+    from .config import get as cfg_get
+
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    # v2 优先,回退 v1 量化版(旧环境兼容)
-    for name in ("icon_detect_v2.onnx", "icon_detect.onnx"):
-        p = os.path.join(root, "models", name)
-        if os.path.exists(p):
-            return p
-    path = os.path.join(root, "models", "icon_detect_v2.onnx")
-    # 首次运行:下载
+    want = cfg_get("perceive", "icon_model", "v1")
+    if want == "v2":
+        # v2 优先;无则自动下载(80MB)
+        path = os.path.join(root, "models", "icon_detect_v2.onnx")
+        if os.path.exists(path):
+            return path
+        path = _download_icon_model(root, "icon_detect_v2.onnx")
+        if path:
+            return path
+        # 下载失败 → 回退 v1 量化版(仓库自带,零成本)
+        v1 = os.path.join(root, "models", "icon_detect.onnx")
+        return v1 if os.path.exists(v1) else ""
+    # v1 默认:仓库自带,不存在才尝试下载量化版(旧环境兼容)
+    path = os.path.join(root, "models", "icon_detect.onnx")
+    if os.path.exists(path):
+        return path
+    return _download_icon_model(root, "icon_detect.onnx")
+
+
+def _download_icon_model(root: str, name: str) -> str:
+    """自动下载模型(带 .tmp 原子替换),失败返回空串。"""
+    path = os.path.join(root, "models", name)
+    url = (_ICON_MODEL_REMOTE_V2 if name == "icon_detect_v2.onnx"
+           else _ICON_MODEL_REMOTE_V1)
     try:
         import urllib.request
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
         tmp = path + ".tmp"
-        urllib.request.urlretrieve(_ICON_MODEL_REMOTE, tmp)
+        urllib.request.urlretrieve(url, tmp)
         os.replace(tmp, path)
         return path
     except Exception:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
         return ""
 
 

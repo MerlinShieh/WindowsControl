@@ -17,9 +17,10 @@ env/
 config.json
 ~/.global_assistant/
 
-# ── 模型权重(首次运行自动下载,不进 Git;README 说明保留)──
+# ── 模型权重(v1 量化模型仓库自带开箱即用;v2 大模型自动下载不进 Git)──
 models/*
 !models/README.md
+!models/icon_detect.onnx
 
 # ── 临时/截图产物 ──
 *.png
